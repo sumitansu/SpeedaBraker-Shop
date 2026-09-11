@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ArrowLeft, ArrowRight, ChevronDown, Receipt, Check } from 'lucide-react';
+import { Analytics } from '@vercel/analytics/react';
 
 import { UpperBoxConfig, LowerSlotConfig, StepId, StepConfig, AntennaDbiType } from './types';
 import { calculateTotalPrice } from './utils/pricing';
@@ -1029,6 +1030,7 @@ export default function App() {
       </>
     )}
   </main>
+    <Analytics />
     </div>
   );
 }
