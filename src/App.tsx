@@ -1,14 +1,26 @@
-import React, { useState, useMemo } from 'react';
-import { ArrowLeft, ArrowRight, ChevronDown, Receipt, Check } from 'lucide-react';
-import { Analytics } from '@vercel/analytics/react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { ArrowLeft, ArrowRight, ChevronDown, Receipt } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
-import { UpperBoxConfig, LowerSlotConfig, StepId, StepConfig, AntennaDbiType } from './types';
-import { calculateTotalPrice } from './utils/pricing';
+import { UpperBoxConfig, LowerSlotConfig, StepId, StepConfig, AntennaDbiType, AppliedPromo } from './types';
+import { calculateTotalPrice, PRICING_CATALOG, usePricingCatalog } from './utils/pricing';
 import { useAnimatedPrice } from './hooks/useAnimatedPrice';
+import {
+  extractBaseCustomerCode,
+  calculateDiscount,
+} from './utils/promoCodes';
+import {
+  testFirebaseConnection,
+  ensureAdminAccountSeeded,
+  saveOrderToFirestore,
+  verifyOrderInFirestore,
+  ProductStockRecord,
+} from './lib/firebase';
 
 import { Header } from './components/Header';
 import { TopStatusGrid } from './components/TopStatusGrid';
 import { BillCanvas } from './components/BillCanvas';
+import { AdminCanvas } from './components/AdminCanvas';
 import { ConfirmResetModal } from './components/modals/ConfirmResetModal';
 import { AntennaInfoModal } from './components/modals/AntennaInfoModal';
 import { WirelessWarningModal } from './components/modals/WirelessWarningModal';
@@ -20,6 +32,7 @@ import { AddUnconfiguredAntennaModal } from './components/modals/AddUnconfigured
 import { AddAndConfigureAntennaModal } from './components/modals/AddAndConfigureAntennaModal';
 import { CustomizeAntennaModal } from './components/modals/CustomizeAntennaModal';
 import { ImportModal } from './components/modals/ImportModal';
+import { AdminLoginModal } from './components/modals/AdminLoginModal';
 
 import { FirmwareStep } from './components/steps/FirmwareStep';
 import { DisplayStep } from './components/steps/DisplayStep';
@@ -28,6 +41,7 @@ import { AntennaStep } from './components/steps/AntennaStep';
 import { AntennaQualityStep } from './components/steps/AntennaQualityStep';
 import { AntennaTypeStep } from './components/steps/AntennaTypeStep';
 import {
+  generateBoughtItemCode,
   generateInvoiceNumber,
   generateRandomCustomerCode,
   generateOrderDetailsJson,
@@ -57,6 +71,15 @@ export default function App() {
   const [slots, setSlots] = useState<LowerSlotConfig[]>(initialSlots);
   const [antennaDbiTypes, setAntennaDbiTypes] = useState<Record<number, AntennaDbiType | undefined>>(initialAntennaDbiTypes);
   const [currentStep, setCurrentStep] = useState<StepId>('firmware');
+  const [direction, setDirection] = useState<number>(1);
+
+  const goToStep = (targetStep: StepId) => {
+    const stepOrder: StepId[] = ['firmware', 'display', 'wireless', 'antennas', 'quality', 'type'];
+    const targetIndex = stepOrder.indexOf(targetStep);
+    const currentIndex = stepOrder.indexOf(currentStep);
+    setDirection(targetIndex >= currentIndex ? 1 : -1);
+    setCurrentStep(targetStep);
+  };
 
   // Modals
   const [showConfirmReset, setShowConfirmReset] = useState<boolean>(false);
@@ -74,7 +97,6 @@ export default function App() {
   const [customizeSlotId, setCustomizeSlotId] = useState<number | null>(null);
   const [showBillCanvas, setShowBillCanvas] = useState<boolean>(false);
   const [showImportModal, setShowImportModal] = useState<boolean>(false);
-  const [importNotification, setImportNotification] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
 
   // Active antenna count
   const activeAntennaCount = useMemo(() => {
@@ -138,10 +160,12 @@ export default function App() {
     }
   }, [isNextDisabled, currentStep]);
 
+  const pricingCatalog = usePricingCatalog();
+
   // Total price & animated values
   const totalPrice = useMemo(() => {
-    return calculateTotalPrice(upperBoxes, slots, antennaDbiTypes);
-  }, [upperBoxes, slots, antennaDbiTypes]);
+    return calculateTotalPrice(upperBoxes, slots, antennaDbiTypes, pricingCatalog);
+  }, [upperBoxes, slots, antennaDbiTypes, pricingCatalog]);
 
   const { displayValue: animatedPrice, diff: priceDiff, direction: priceDirection } = useAnimatedPrice(totalPrice);
 
@@ -281,7 +305,7 @@ export default function App() {
   const handleSelectVersion = (version: 'V1' | 'V2') => {
     if (version === 'V2') {
       applyV2Firmware();
-      setCurrentStep('display');
+      goToStep('display');
       return;
     }
 
@@ -296,12 +320,12 @@ export default function App() {
       } else {
         // Both wireless is not yes and antennas are 2: direct switch without popup
         applyV1Firmware(true);
-        setCurrentStep('display');
+        goToStep('display');
       }
     } else {
       // From None to V1
       applyV1Firmware(true);
-      setCurrentStep('display');
+      goToStep('display');
     }
   };
 
@@ -312,18 +336,18 @@ export default function App() {
 
   const handleSelectDisplay = (val: 'Yes' | 'No') => {
     if (currentVersion === 'None') {
-      setCurrentStep('firmware');
+      goToStep('firmware');
       return;
     }
     setUpperBoxes((prev) =>
       prev.map((box) => (box.label.toLowerCase() === 'display' ? { ...box, value: val } : box))
     );
-    setCurrentStep('wireless');
+    goToStep('wireless');
   };
 
   const handleSelectWireless = (val: 'Yes' | 'No') => {
     if (currentVersion === 'None') {
-      setCurrentStep('firmware');
+      goToStep('firmware');
       return;
     }
     if (val === 'Yes') {
@@ -343,12 +367,12 @@ export default function App() {
         prev.map((box) => (box.label.toLowerCase() === 'wireless' ? { ...box, value: val } : box))
       );
     }
-    setCurrentStep('antennas');
+    goToStep('antennas');
   };
 
   const handleSetAntennaCount = (count: number) => {
     if (currentVersion === 'None') {
-      setCurrentStep('firmware');
+      goToStep('firmware');
       return;
     }
 
@@ -382,7 +406,7 @@ export default function App() {
     });
 
     // Automatically switch to next question step (quality)
-    setCurrentStep('quality');
+    goToStep('quality');
   };
 
   const handleUpgradeToV2FromAntenna = () => {
@@ -400,7 +424,7 @@ export default function App() {
 
     if (allSelected) {
       setTimeout(() => {
-        setCurrentStep('type');
+        goToStep('type');
       }, 150);
     }
   };
@@ -440,7 +464,7 @@ export default function App() {
 
     if (allSelected) {
       setTimeout(() => {
-        setCurrentStep('type');
+        goToStep('type');
       }, 150);
     }
   };
@@ -536,18 +560,84 @@ export default function App() {
   };
 
   const [customerCode, setCustomerCode] = useState<string>(() => generateRandomCustomerCode());
+  const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
+  const [dbVerificationStatus, setDbVerificationStatus] = useState<{
+    checked: boolean;
+    verified: boolean;
+    message: string;
+  } | null>(null);
+
+  // Admin Authentication & Admin Canvas State (Non-persistent session)
+  const [showAdminCanvas, setShowAdminCanvas] = useState<boolean>(false);
+  const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(false);
+  const [currentAdminUser, setCurrentAdminUser] = useState<string | null>(null);
+
+  // Product Stock Local State (maps product_id -> in_stock boolean)
+  const [stockMap, setStockMap] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    testFirebaseConnection();
+    ensureAdminAccountSeeded();
+  }, []);
+
+  const handleAdminLoginSuccess = (username: string) => {
+    setIsAdminLoggedIn(true);
+    setCurrentAdminUser(username);
+    // Open the admin management canvas on successful login
+    setShowAdminCanvas(true);
+  };
+
+  const handleAdminLogout = () => {
+    setIsAdminLoggedIn(false);
+    setCurrentAdminUser(null);
+    setShowAdminCanvas(false);
+  };
+
+  const handleApplyPromo = (promo: AppliedPromo) => {
+    setAppliedPromo(promo);
+    setDbVerificationStatus({
+      checked: true,
+      verified: true,
+      message: 'Verified promo code with Firebase database',
+    });
+    setCustomerCode((prev) => extractBaseCustomerCode(prev));
+  };
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null);
+    setDbVerificationStatus(null);
+    setCustomerCode((prev) => extractBaseCustomerCode(prev));
+  };
 
   const invoiceNumber = useMemo(() => {
     return generateInvoiceNumber(upperBoxes, slots, antennaDbiTypes, customerCode);
   }, [upperBoxes, slots, antennaDbiTypes, customerCode]);
 
-  const handleDownloadInvoice = () => {
+  const handleDownloadInvoice = async () => {
+    const configuredSubtotal = calculateTotalPrice(upperBoxes, slots, antennaDbiTypes);
+    const grandTotal = configuredSubtotal + PRICING_CATALOG.mandatoryModules;
+    const { discountAmount, finalTotal } = calculateDiscount(grandTotal, appliedPromo);
+    const itemCode = generateBoughtItemCode(upperBoxes, slots, antennaDbiTypes);
+
+    // Save order record to Firebase Firestore
+    await saveOrderToFirestore(
+      invoiceNumber,
+      itemCode,
+      customerCode,
+      grandTotal,
+      discountAmount,
+      finalTotal,
+      appliedPromo
+    );
+
     const orderDetails = generateOrderDetailsJson(
       upperBoxes,
       slots,
       antennaDbiTypes,
       customerCode,
-      invoiceNumber
+      invoiceNumber,
+      appliedPromo
     );
     downloadSbsFile(invoiceNumber, orderDetails);
   };
@@ -561,9 +651,11 @@ export default function App() {
     setCustomizeSlotId(null);
     setShowBillCanvas(false);
     setCustomerCode(generateRandomCustomerCode());
+    setAppliedPromo(null);
+    setDbVerificationStatus(null);
   };
 
-  const applyImportedConfiguration = (parsed: ParsedImportResult) => {
+  const applyImportedConfiguration = async (parsed: ParsedImportResult) => {
     try {
       const decoded = decodeBoughtItemCode(parsed.itemCode);
 
@@ -606,54 +698,95 @@ export default function App() {
       });
       setAntennaDbiTypes(newDbi);
 
-      // 4. If full invoice ID provided, set customer code and open bill section
+      // 4. If full invoice ID provided, verify against Firebase Firestore
       if (parsed.type === 'invoice') {
-        if (parsed.customerCode) {
-          setCustomerCode(parsed.customerCode);
+        const cleanCust = parsed.customerCode ? extractBaseCustomerCode(parsed.customerCode) : generateRandomCustomerCode();
+        setCustomerCode(cleanCust);
+
+        if (parsed.invoiceNumber) {
+          const verification = await verifyOrderInFirestore(parsed.invoiceNumber);
+          if (verification.exists && verification.verifiedPromo) {
+            setAppliedPromo(verification.verifiedPromo);
+            setDbVerificationStatus({
+              checked: true,
+              verified: true,
+              message: 'Verified authentic database order',
+            });
+          } else {
+            // Unregistered or spoofed/tampered
+            setAppliedPromo(null);
+            setDbVerificationStatus({
+              checked: true,
+              verified: false,
+              message: verification.exists
+                ? 'Order tampered: Database verification failed'
+                : 'Unregistered invoice: No database promo discount authorized',
+            });
+          }
+        } else {
+          setAppliedPromo(null);
+          setDbVerificationStatus(null);
         }
         setShowBillCanvas(true);
-        setImportNotification({
-          message: `Invoice ${parsed.invoiceNumber || `SBS-${parsed.itemCode}-${parsed.customerCode}`} imported successfully!`,
-          type: 'success',
-        });
       } else {
-        // If only code of item configuration then apply it
+        // Hardware-only item code import
         setShowBillCanvas(false);
+        setAppliedPromo(null);
+        setDbVerificationStatus(null);
         if (decoded.version !== 'None') {
           setCurrentStep('type');
         }
-        setImportNotification({
-          message: `Configuration [${parsed.itemCode}] applied successfully!`,
-          type: 'success',
-        });
       }
 
       setShowImportModal(false);
-
-      setTimeout(() => {
-        setImportNotification(null);
-      }, 4000);
     } catch (err) {
       console.error('Failed to apply imported configuration', err);
     }
   };
 
+  // Global paste handler: users can press Ctrl+V anywhere on the page to import!
+  useEffect(() => {
+    const handleGlobalPaste = (e: ClipboardEvent) => {
+      if (showImportModal) return;
+
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
+      const text = e.clipboardData?.getData('text');
+      if (!text || !text.trim()) return;
+
+      const parsed = parseImportInput(text);
+      if (parsed) {
+        e.preventDefault();
+        applyImportedConfiguration(parsed);
+      }
+    };
+
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => window.removeEventListener('paste', handleGlobalPaste);
+  }, [showImportModal, upperBoxes, slots, antennaDbiTypes, customerCode]);
+
   const handleImportClick = async () => {
-    // 1. Try to fetch code or full invoice id from clipboard
+    // 1. Try to fetch code or full invoice id directly from clipboard
     try {
+      window.focus();
       if (navigator.clipboard && navigator.clipboard.readText) {
         const clipText = await navigator.clipboard.readText();
-        const parsed = parseImportInput(clipText);
-        if (parsed) {
-          applyImportedConfiguration(parsed);
-          return;
+        if (clipText && clipText.trim()) {
+          const parsed = parseImportInput(clipText);
+          if (parsed) {
+            applyImportedConfiguration(parsed);
+            return;
+          }
         }
       }
     } catch {
-      // Clipboard read blocked, permission error, or not supported
+      // Clipboard read blocked by browser permissions policy (common in iframes)
     }
 
-    // 2. If not found, open popup to add it manually
+    // 2. If blocked or empty, open modal to paste or drop .sbs file
     setShowImportModal(true);
   };
 
@@ -662,187 +795,218 @@ export default function App() {
       id="app-root"
       className="h-screen w-screen flex flex-col bg-neutral-100 text-neutral-900 select-none overflow-hidden font-sans"
     >
-      {/* Import Notification Toast */}
-      {importNotification && (
-        <div
-          id="import-notification-toast"
-          className="fixed top-16 right-4 sm:right-6 z-50 bg-neutral-900 text-white text-xs sm:text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg border border-neutral-700 flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200"
-        >
-          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{importNotification.message}</span>
-        </div>
-      )}
-
       {/* Header */}
       <Header
         showBillCanvas={showBillCanvas}
-        onBackToConfig={() => setShowBillCanvas(false)}
+        showAdminCanvas={showAdminCanvas}
+        onBackToConfig={() => {
+          setShowBillCanvas(false);
+          setShowAdminCanvas(false);
+        }}
+        onOpenAdminCanvas={() => setShowAdminCanvas(true)}
         onDownloadInvoice={handleDownloadInvoice}
         invoiceNumber={invoiceNumber}
         onResetClick={() => setShowConfirmReset(true)}
         onImportClick={handleImportClick}
+        onLoginClick={() => setShowLoginModal(true)}
+        isLoggedIn={isAdminLoggedIn}
+        currentAdminUser={currentAdminUser}
       />
 
-      {/* Import Configuration / Invoice Modal */}
-      {showImportModal && (
-        <ImportModal
-          onClose={() => setShowImportModal(false)}
-          onApply={applyImportedConfiguration}
-        />
-      )}
+      {/* Admin Login Modal */}
+      <AdminLoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        isLoggedIn={isAdminLoggedIn}
+        currentAdminUser={currentAdminUser}
+        onLoginSuccess={handleAdminLoginSuccess}
+        onLogout={handleAdminLogout}
+      />
 
-      {/* Confirmation Reset Modal */}
-      {showConfirmReset && (
-        <ConfirmResetModal
-          onClose={() => setShowConfirmReset(false)}
-          onConfirm={handleConfirmReset}
-        />
-      )}
+      {/* Modals with AnimatePresence for exit closing animations */}
+      <AnimatePresence>
+        {/* Import Configuration / Invoice Modal */}
+        {showImportModal && (
+          <ImportModal
+            key="import-modal"
+            onClose={() => setShowImportModal(false)}
+            onApply={applyImportedConfiguration}
+          />
+        )}
 
-      {/* Antenna Info Modal (V1 requirement / V2 recommendation) */}
-      {activeAntennaModal && (
-        <AntennaInfoModal
-          type={activeAntennaModal}
-          onClose={() => setActiveAntennaModal(null)}
-        />
-      )}
+        {/* Confirmation Reset Modal */}
+        {showConfirmReset && (
+          <ConfirmResetModal
+            key="confirm-reset-modal"
+            onClose={() => setShowConfirmReset(false)}
+            onConfirm={handleConfirmReset}
+          />
+        )}
 
-      {/* 5GHz Wi-Fi Compatibility Warning Modal */}
-      {showWirelessWarningModal && (
-        <WirelessWarningModal onClose={() => setShowWirelessWarningModal(false)} />
-      )}
+        {/* Antenna Info Modal (V1 requirement / V2 recommendation) */}
+        {activeAntennaModal && (
+          <AntennaInfoModal
+            key="antenna-info-modal"
+            type={activeAntennaModal}
+            onClose={() => setActiveAntennaModal(null)}
+          />
+        )}
 
-      {/* 1 Antenna Recommendation Warning Modal */}
-      {showOneAntennaWarningModal && (
-        <OneAntennaWarningModal
-          onClose={() => setShowOneAntennaWarningModal(false)}
-          onSelectTwoAntennas={() => {
-            handleSetAntennaCount(2);
-            setShowOneAntennaWarningModal(false);
-          }}
-        />
-      )}
+        {/* 5GHz Wi-Fi Compatibility Warning Modal */}
+        {showWirelessWarningModal && (
+          <WirelessWarningModal
+            key="wireless-warning-modal"
+            onClose={() => setShowWirelessWarningModal(false)}
+          />
+        )}
 
-      {/* Bug 1: V1 Antenna Limit Modal (Slot 3 or 4 attempted on V1) */}
-      {v1LimitModalSlot !== null && (
-        <V1AntennaLimitModal
-          slotId={v1LimitModalSlot}
-          onClose={() => setV1LimitModalSlot(null)}
-          onUpgradeToV2={handleUpgradeToV2FromLimitModal}
-        />
-      )}
+        {/* 1 Antenna Recommendation Warning Modal */}
+        {showOneAntennaWarningModal && (
+          <OneAntennaWarningModal
+            key="one-antenna-warning-modal"
+            onClose={() => setShowOneAntennaWarningModal(false)}
+            onSelectTwoAntennas={() => {
+              handleSetAntennaCount(2);
+              setShowOneAntennaWarningModal(false);
+            }}
+          />
+        )}
 
-      {/* Bug 2: V1 Downgrade Antenna & Wireless Requirement Modal */}
-      {showV1DowngradeModal && (
-        <V1DowngradeAntennaModal
-          currentAntennaCount={activeAntennaCount}
-          hasWirelessEnabled={
-            upperBoxes.find((b) => b.label.toLowerCase() === 'wireless')?.value === 'Yes'
-          }
-          onClose={() => setShowV1DowngradeModal(false)}
-          onConfirmDowngrade={handleConfirmDowngrade}
-        />
-      )}
+        {/* Bug 1: V1 Antenna Limit Modal (Slot 3 or 4 attempted on V1) */}
+        {v1LimitModalSlot !== null && (
+          <V1AntennaLimitModal
+            key="v1-limit-modal"
+            slotId={v1LimitModalSlot}
+            onClose={() => setV1LimitModalSlot(null)}
+            onUpgradeToV2={handleUpgradeToV2FromLimitModal}
+          />
+        )}
 
-      {/* Add Unconfigured Antenna Modal (Step 5 Quality) */}
-      {unconfiguredModalSlot !== null && (
-        <AddUnconfiguredAntennaModal
-          slotId={unconfiguredModalSlot}
-          onClose={() => setUnconfiguredModalSlot(null)}
-          onAddAsNormal={() => handleAddSlotQuality(unconfiguredModalSlot, 'Normal')}
-          onAddAsPowerful={() => handleAddSlotQuality(unconfiguredModalSlot, 'Powerful')}
-        />
-      )}
+        {/* Bug 2: V1 Downgrade Antenna & Wireless Requirement Modal */}
+        {showV1DowngradeModal && (
+          <V1DowngradeAntennaModal
+            key="v1-downgrade-modal"
+            currentAntennaCount={activeAntennaCount}
+            hasWirelessEnabled={
+              upperBoxes.find((b) => b.label.toLowerCase() === 'wireless')?.value === 'Yes'
+            }
+            onClose={() => setShowV1DowngradeModal(false)}
+            onConfirmDowngrade={handleConfirmDowngrade}
+          />
+        )}
 
-      {/* Add & Configure Antenna Modal (Step 6 Type) */}
-      {unconfiguredTypeModalData !== null && (
-        <AddAndConfigureAntennaModal
-          slotId={unconfiguredTypeModalData.slotId}
-          initialTierId={unconfiguredTypeModalData.initialTierId}
-          onClose={() => setUnconfiguredTypeModalData(null)}
-          onConfirm={(slotId, quality, dbi) => {
-            setSlots((prev) =>
-              prev.map((slot) => (slot.id === slotId ? { ...slot, value: quality } : slot))
-            );
-            setAntennaDbiTypes((prev) => ({
-              ...prev,
-              [slotId]: dbi,
-            }));
-            setUnconfiguredTypeModalData(null);
-          }}
-        />
-      )}
+        {/* Add Unconfigured Antenna Modal (Step 5 Quality) */}
+        {unconfiguredModalSlot !== null && (
+          <AddUnconfiguredAntennaModal
+            key="unconfigured-quality-modal"
+            slotId={unconfiguredModalSlot}
+            onClose={() => setUnconfiguredModalSlot(null)}
+            onAddAsNormal={() => handleAddSlotQuality(unconfiguredModalSlot, 'Normal')}
+            onAddAsPowerful={() => handleAddSlotQuality(unconfiguredModalSlot, 'Powerful')}
+          />
+        )}
 
-      {/* Customize Antenna Modal (from Upper 1/3 Status Canvas) */}
-      {customizeSlotId !== null && (
-        <CustomizeAntennaModal
-          slotId={customizeSlotId}
-          slotStatus={slots.find((s) => s.id === customizeSlotId)?.value || 'None'}
-          currentDbi={antennaDbiTypes[customizeSlotId]}
-          currentVersion={currentVersion}
-          onClose={() => setCustomizeSlotId(null)}
-          onActivate={(slotId) => {
-            setSlots((prev) =>
-              prev.map((slot) => {
-                if (slot.id <= slotId && slot.value.toLowerCase() === 'none') {
-                  return { ...slot, value: 'Conf' };
-                }
-                return slot;
-              })
-            );
-          }}
-          onDeactivate={(slotId) => {
-            setSlots((prev) =>
-              prev.map((slot) => (slot.id === slotId ? { ...slot, value: 'None' } : slot))
-            );
-            setAntennaDbiTypes((prev) => {
-              const copy = { ...prev };
-              delete copy[slotId];
-              return copy;
-            });
-          }}
-          onChangeQuality={(slotId, quality) => {
-            setSlots((prev) =>
-              prev.map((slot) => (slot.id === slotId ? { ...slot, value: quality } : slot))
-            );
-          }}
-          onChangeDbi={(slotId, dbi) => {
-            setAntennaDbiTypes((prev) => ({
-              ...prev,
-              [slotId]: dbi,
-            }));
-          }}
-          onUpgradeToV2={(slotId) => {
-            applyV2Firmware();
-            setSlots((prev) =>
-              prev.map((slot) => {
-                if (slot.id <= slotId && slot.value.toLowerCase() === 'none') {
-                  return { ...slot, value: 'Conf' };
-                }
-                return slot;
-              })
-            );
-          }}
-        />
-      )}
+        {/* Add & Configure Antenna Modal (Step 6 Type) */}
+        {unconfiguredTypeModalData !== null && (
+          <AddAndConfigureAntennaModal
+            key="unconfigured-type-modal"
+            slotId={unconfiguredTypeModalData.slotId}
+            initialTierId={unconfiguredTypeModalData.initialTierId}
+            onClose={() => setUnconfiguredTypeModalData(null)}
+            onConfirm={(slotId, quality, dbi) => {
+              setSlots((prev) =>
+                prev.map((slot) => (slot.id === slotId ? { ...slot, value: quality } : slot))
+              );
+              setAntennaDbiTypes((prev) => ({
+                ...prev,
+                [slotId]: dbi,
+              }));
+              setUnconfiguredTypeModalData(null);
+            }}
+          />
+        )}
 
-      {/* Jump to Question Modal */}
-      {showJumpModal && (
-        <JumpQuestionModal
-          steps={STEPS}
-          currentStep={currentStep}
-          currentVersion={currentVersion}
-          upperBoxes={upperBoxes}
-          slots={slots}
-          antennaDbiTypes={antennaDbiTypes}
-          onClose={() => setShowJumpModal(false)}
-          onSelectStep={(stepId) => setCurrentStep(stepId)}
-        />
-      )}
+        {/* Customize Antenna Modal (from Upper 1/3 Status Canvas) */}
+        {customizeSlotId !== null && (
+          <CustomizeAntennaModal
+            key="customize-antenna-modal"
+            slotId={customizeSlotId}
+            slotStatus={slots.find((s) => s.id === customizeSlotId)?.value || 'None'}
+            currentDbi={antennaDbiTypes[customizeSlotId]}
+            currentVersion={currentVersion}
+            onClose={() => setCustomizeSlotId(null)}
+            onActivate={(slotId) => {
+              setSlots((prev) =>
+                prev.map((slot) => {
+                  if (slot.id <= slotId && slot.value.toLowerCase() === 'none') {
+                    return { ...slot, value: 'Conf' };
+                  }
+                  return slot;
+                })
+              );
+            }}
+            onDeactivate={(slotId) => {
+              setSlots((prev) =>
+                prev.map((slot) => (slot.id === slotId ? { ...slot, value: 'None' } : slot))
+              );
+              setAntennaDbiTypes((prev) => {
+                const copy = { ...prev };
+                delete copy[slotId];
+                return copy;
+              });
+            }}
+            onChangeQuality={(slotId, quality) => {
+              setSlots((prev) =>
+                prev.map((slot) => (slot.id === slotId ? { ...slot, value: quality } : slot))
+              );
+            }}
+            onChangeDbi={(slotId, dbi) => {
+              setAntennaDbiTypes((prev) => ({
+                ...prev,
+                [slotId]: dbi,
+              }));
+            }}
+            onUpgradeToV2={(slotId) => {
+              applyV2Firmware();
+              setSlots((prev) =>
+                prev.map((slot) => {
+                  if (slot.id <= slotId && slot.value.toLowerCase() === 'none') {
+                    return { ...slot, value: 'Conf' };
+                  }
+                  return slot;
+                })
+              );
+            }}
+          />
+        )}
+
+        {/* Jump to Question Modal */}
+        {showJumpModal && (
+          <JumpQuestionModal
+            key="jump-question-modal"
+            steps={STEPS}
+            currentStep={currentStep}
+            currentVersion={currentVersion}
+            upperBoxes={upperBoxes}
+            slots={slots}
+            antennaDbiTypes={antennaDbiTypes}
+            onClose={() => setShowJumpModal(false)}
+            onSelectStep={(stepId) => goToStep(stepId)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Main Canvas Area */}
       <main id="main-canvas" className="flex-1 flex flex-col w-full h-[calc(100vh-3.5rem)] overflow-hidden">
-        {showBillCanvas ? (
+        {showAdminCanvas ? (
+          <AdminCanvas
+            currentAdminUser={currentAdminUser}
+            onBackToConfig={() => setShowAdminCanvas(false)}
+            onLogout={handleAdminLogout}
+            stockMap={stockMap}
+            onStockUpdated={(updatedStock) => setStockMap(updatedStock)}
+          />
+        ) : showBillCanvas ? (
           <BillCanvas
             upperBoxes={upperBoxes}
             slots={slots}
@@ -850,6 +1014,10 @@ export default function App() {
             customerCode={customerCode}
             invoiceNumber={invoiceNumber}
             onDownloadInvoice={handleDownloadInvoice}
+            appliedPromo={appliedPromo}
+            onApplyPromo={handleApplyPromo}
+            onRemovePromo={handleRemovePromo}
+            dbVerificationStatus={dbVerificationStatus}
           />
         ) : (
           <>
@@ -881,24 +1049,28 @@ export default function App() {
             {/* Left: Previous Question */}
             <div className="flex-1 flex justify-start min-w-0">
               {previousStep ? (
-                <button
+                <motion.button
                   id="btn-nav-previous"
                   type="button"
-                  onClick={() => setCurrentStep(previousStep.id)}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={() => goToStep(previousStep.id)}
                   className="h-8 sm:h-8.5 flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 text-xs sm:text-sm font-semibold text-neutral-800 hover:text-neutral-900 bg-white hover:bg-neutral-50 active:bg-neutral-100 rounded-lg border border-neutral-300 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
                 >
                   <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-neutral-600 shrink-0" />
                   <span className="hidden sm:inline truncate max-w-[120px]">{previousStep.name}</span>
                   <span className="sm:hidden">Back</span>
-                </button>
+                </motion.button>
               ) : null}
             </div>
 
             {/* Centre: Current Question Name / Click to Jump */}
             <div className="flex items-center justify-center shrink-0 px-1">
-              <button
+              <motion.button
                 id="btn-open-jump-modal"
                 type="button"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
                 onClick={() => setShowJumpModal(true)}
                 title="Click to jump to any question"
                 className="h-8 sm:h-8.5 group flex items-center gap-1.5 px-3 sm:px-4 rounded-full bg-neutral-900 hover:bg-black text-white shadow-2xs transition-all cursor-pointer whitespace-nowrap"
@@ -907,19 +1079,21 @@ export default function App() {
                   {currentStepConfig.name}
                 </span>
                 <ChevronDown className="w-3.5 h-3.5 text-neutral-400 group-hover:text-white transition-colors shrink-0" />
-              </button>
+              </motion.button>
             </div>
 
             {/* Right: Next Question or Bill Button */}
             <div className="flex-1 flex justify-end min-w-0">
               {nextStep ? (
-                <button
+                <motion.button
                   id="btn-nav-next"
                   type="button"
                   disabled={isNextDisabled}
+                  whileHover={!isNextDisabled ? { scale: 1.02 } : undefined}
+                  whileTap={!isNextDisabled ? { scale: 0.96 } : undefined}
                   onClick={() => {
                     if (isNextDisabled) return;
-                    setCurrentStep(nextStep.id);
+                    goToStep(nextStep.id);
                   }}
                   title={nextButtonTitle}
                   className={`h-8 sm:h-8.5 flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 text-xs sm:text-sm font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap ${
@@ -931,12 +1105,14 @@ export default function App() {
                   <span className="hidden sm:inline truncate max-w-[120px]">{nextStep.name}</span>
                   <span className="sm:hidden">Next</span>
                   <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-                </button>
+                </motion.button>
               ) : (
-                <button
+                <motion.button
                   id="btn-nav-bill"
                   type="button"
                   disabled={isNextDisabled}
+                  whileHover={!isNextDisabled ? { scale: 1.02 } : undefined}
+                  whileTap={!isNextDisabled ? { scale: 0.96 } : undefined}
                   onClick={() => {
                     if (isNextDisabled) return;
                     setShowBillCanvas(true);
@@ -951,86 +1127,117 @@ export default function App() {
                   <Receipt className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                   <span>Bill</span>
                   <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-                </button>
+                </motion.button>
               )}
             </div>
           </div>
 
           {/* Main Question Content View */}
-          <div id="question-content-container" className="flex-1 w-full min-h-0 flex flex-col">
-            {currentStep === 'firmware' && (
-              <FirmwareStep
-                currentVersion={currentVersion}
-                onSelectVersion={handleSelectVersion}
-                onOpenAntennaModal={(type) => setActiveAntennaModal(type)}
-                onNextStep={() => setCurrentStep('display')}
-              />
-            )}
-
-            {currentStep === 'display' && (
-              <DisplayStep
-                currentVersion={currentVersion}
-                currentDisplay={currentDisplay}
-                onSelectDisplay={handleSelectDisplay}
-                onGoToFirmware={() => setCurrentStep('firmware')}
-              />
-            )}
-
-            {currentStep === 'wireless' && (
-              <WirelessStep
-                currentVersion={currentVersion}
-                currentWireless={currentWireless}
-                onSelectWireless={handleSelectWireless}
-                onOpenWirelessWarning={() => setShowWirelessWarningModal(true)}
-                onGoToFirmware={() => setCurrentStep('firmware')}
-              />
-            )}
-
-            {currentStep === 'antennas' && (
-              <AntennaStep
-                currentVersion={currentVersion}
-                activeAntennaCount={activeAntennaCount}
-                onSetAntennaCount={handleSetAntennaCount}
-                onUpgradeToV2={handleUpgradeToV2FromAntenna}
-                onOpenOneAntennaWarning={() => setShowOneAntennaWarningModal(true)}
-                onGoToFirmware={() => setCurrentStep('firmware')}
-              />
-            )}
-
-            {currentStep === 'quality' && (
-              <AntennaQualityStep
-                currentVersion={currentVersion}
-                slots={slots}
-                onSetSlotQuality={handleSetSlotQuality}
-                onOpenUnconfiguredModal={handleOpenUnconfiguredModal}
-                onGoToFirmware={() => setCurrentStep('firmware')}
-                onGoToAntennas={() => setCurrentStep('antennas')}
-              />
-            )}
-
-            {currentStep === 'type' && (
-              <AntennaTypeStep
-                currentVersion={currentVersion}
-                slots={slots}
-                antennaDbiTypes={antennaDbiTypes}
-                onSelectAntennaType={handleSelectAntennaType}
-                onOpenUnconfiguredModal={(slotId, tierId) => {
-                  if (currentVersion === 'V1' && slotId > 2) {
-                    setV1LimitModalSlot(slotId);
-                    return;
-                  }
-                  setUnconfiguredTypeModalData({ slotId, initialTierId: tierId });
+          <div id="question-content-container" className="flex-1 w-full min-h-0 flex flex-col relative overflow-hidden">
+            <AnimatePresence mode="wait" custom={direction}>
+              <motion.div
+                key={currentStep}
+                custom={direction}
+                variants={{
+                  enter: (dir: number) => ({
+                    x: dir > 0 ? 24 : -24,
+                    opacity: 0,
+                  }),
+                  center: {
+                    x: 0,
+                    opacity: 1,
+                  },
+                  exit: (dir: number) => ({
+                    x: dir > 0 ? -24 : 24,
+                    opacity: 0,
+                  }),
                 }}
-                onGoToFirmware={() => setCurrentStep('firmware')}
-                onGoToAntennas={() => setCurrentStep('antennas')}
-              />
-            )}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: 0.18, ease: [0.25, 1, 0.5, 1] }}
+                style={{ willChange: 'transform, opacity', transform: 'translateZ(0)' }}
+                className="flex-1 w-full min-h-0 flex flex-col"
+              >
+                {currentStep === 'firmware' && (
+                  <FirmwareStep
+                    currentVersion={currentVersion}
+                    onSelectVersion={handleSelectVersion}
+                    onOpenAntennaModal={(type) => setActiveAntennaModal(type)}
+                    onNextStep={() => goToStep('display')}
+                    stockMap={stockMap}
+                  />
+                )}
+
+                {currentStep === 'display' && (
+                  <DisplayStep
+                    currentVersion={currentVersion}
+                    currentDisplay={currentDisplay}
+                    onSelectDisplay={handleSelectDisplay}
+                    onGoToFirmware={() => goToStep('firmware')}
+                    stockMap={stockMap}
+                  />
+                )}
+
+                {currentStep === 'wireless' && (
+                  <WirelessStep
+                    currentVersion={currentVersion}
+                    currentWireless={currentWireless}
+                    onSelectWireless={handleSelectWireless}
+                    onOpenWirelessWarning={() => setShowWirelessWarningModal(true)}
+                    onGoToFirmware={() => goToStep('firmware')}
+                    stockMap={stockMap}
+                  />
+                )}
+
+                {currentStep === 'antennas' && (
+                  <AntennaStep
+                    currentVersion={currentVersion}
+                    activeAntennaCount={activeAntennaCount}
+                    onSetAntennaCount={handleSetAntennaCount}
+                    onUpgradeToV2={handleUpgradeToV2FromAntenna}
+                    onOpenOneAntennaWarning={() => setShowOneAntennaWarningModal(true)}
+                    onGoToFirmware={() => goToStep('firmware')}
+                  />
+                )}
+
+                {currentStep === 'quality' && (
+                  <AntennaQualityStep
+                    currentVersion={currentVersion}
+                    slots={slots}
+                    onSetSlotQuality={handleSetSlotQuality}
+                    onOpenUnconfiguredModal={handleOpenUnconfiguredModal}
+                    onGoToFirmware={() => goToStep('firmware')}
+                    onGoToAntennas={() => goToStep('antennas')}
+                    stockMap={stockMap}
+                  />
+                )}
+
+                {currentStep === 'type' && (
+                  <AntennaTypeStep
+                    currentVersion={currentVersion}
+                    slots={slots}
+                    antennaDbiTypes={antennaDbiTypes}
+                    onSelectAntennaType={handleSelectAntennaType}
+                    onOpenUnconfiguredModal={(slotId, tierId) => {
+                      if (currentVersion === 'V1' && slotId > 2) {
+                        setV1LimitModalSlot(slotId);
+                        return;
+                      }
+                      setUnconfiguredTypeModalData({ slotId, initialTierId: tierId });
+                    }}
+                    onGoToFirmware={() => goToStep('firmware')}
+                    onGoToAntennas={() => goToStep('antennas')}
+                    stockMap={stockMap}
+                  />
+                )}
+              </motion.div>
+            </AnimatePresence>
           </div>
         </section>
       </>
     )}
   </main>
-    <Analytics />
     </div>
   );
 }

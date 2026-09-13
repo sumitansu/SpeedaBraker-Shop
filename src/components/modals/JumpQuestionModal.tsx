@@ -1,5 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
+import { motion } from 'motion/react';
+import { useTranslation } from 'react-i18next';
 import { StepConfig, StepId, UpperBoxConfig, LowerSlotConfig, AntennaDbiType } from '../../types';
 
 interface JumpQuestionModalProps {
@@ -23,35 +25,48 @@ export const JumpQuestionModal: React.FC<JumpQuestionModalProps> = ({
   onClose,
   onSelectStep,
 }) => {
+  const { t } = useTranslation();
+
   return (
-    <div
+    <motion.div
       id="jump-question-modal-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
       onClick={onClose}
-      className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150"
+      className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4"
     >
-      <div
+      <motion.div
         id="jump-question-dialog"
+        initial={{ scale: 0.94, opacity: 0, y: 10 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.94, opacity: 0, y: 10 }}
+        transition={{ type: 'spring', stiffness: 450, damping: 30 }}
+        style={{ willChange: 'transform, opacity' }}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-2xl shadow-xl border border-neutral-200 p-4 sm:p-6 max-w-sm sm:max-w-md w-full animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col"
+        className="bg-white rounded-2xl shadow-xl border border-neutral-200 p-4 sm:p-6 max-w-sm sm:max-w-md w-full max-h-[90vh] flex flex-col"
       >
         <div className="flex items-center justify-between gap-3 mb-3 pb-2.5 border-b border-neutral-100 shrink-0">
           <div>
             <h3 className="text-base font-bold text-neutral-900 tracking-tight">
-              Jump to Question
+              {t('modals.jump.title', 'Jump to Question')}
             </h3>
             <p className="text-xs text-neutral-500 mt-0.5">
-              Choose any question to jump directly to it
+              {t('modals.jump.subtitle', 'Choose any question to jump directly to it')}
             </p>
           </div>
-          <button
+          <motion.button
             id="btn-close-jump-modal"
             type="button"
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
             onClick={onClose}
             className="w-8 h-8 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-neutral-800 flex items-center justify-center transition-colors cursor-pointer"
-            title="Close"
+            title={t('common.close', 'Close')}
           >
             <X className="w-4 h-4" />
-          </button>
+          </motion.button>
         </div>
 
         <div className="space-y-2 overflow-y-auto pr-0.5">
@@ -74,15 +89,32 @@ export const JumpQuestionModal: React.FC<JumpQuestionModalProps> = ({
                   return wl !== 'None' && wl !== undefined;
                 }
                 case 'antennas': {
-                  return slots.some((s) => s.value.toLowerCase() !== 'none');
+                  const ver = upperBoxes.find((b) => b.label.toLowerCase() === 'version')?.value || currentVersion;
+                  const activeCount = slots.filter((s) => s.value.toLowerCase() !== 'none').length;
+                  if (ver === 'V1') {
+                    // V1 strictly requires exactly 2 antennas (slots 1 & 2 only)
+                    const slots3or4Active = slots.some((s) => (s.id === 3 || s.id === 4) && s.value.toLowerCase() !== 'none');
+                    return activeCount === 2 && !slots3or4Active;
+                  }
+                  return activeCount > 0;
                 }
                 case 'quality': {
+                  const ver = upperBoxes.find((b) => b.label.toLowerCase() === 'version')?.value || currentVersion;
                   const active = slots.filter((s) => s.value.toLowerCase() !== 'none');
+                  if (ver === 'V1') {
+                    const hasInvalidSlots = slots.some((s) => (s.id === 3 || s.id === 4) && s.value.toLowerCase() !== 'none');
+                    if (active.length !== 2 || hasInvalidSlots) return false;
+                  }
                   return active.length > 0 && active.every((s) => s.value === 'Normal' || s.value === 'Powerful');
                 }
                 case 'type': {
+                  const ver = upperBoxes.find((b) => b.label.toLowerCase() === 'version')?.value || currentVersion;
                   const active = slots.filter((s) => s.value.toLowerCase() !== 'none');
                   const dbi = antennaDbiTypes || {};
+                  if (ver === 'V1') {
+                    const hasInvalidSlots = slots.some((s) => (s.id === 3 || s.id === 4) && s.value.toLowerCase() !== 'none');
+                    if (active.length !== 2 || hasInvalidSlots) return false;
+                  }
                   return active.length > 0 && active.every((s) => Boolean(dbi[s.id]));
                 }
                 default:
@@ -95,23 +127,25 @@ export const JumpQuestionModal: React.FC<JumpQuestionModalProps> = ({
 
             let lockReason = '';
             if (isLocked && firstUnansweredPrevStep) {
-              if (firstUnansweredPrevStep.id === 'firmware') lockReason = 'Select Firmware First';
-              else if (firstUnansweredPrevStep.id === 'antennas') lockReason = 'Select Antennas First';
-              else if (firstUnansweredPrevStep.id === 'quality') lockReason = 'Configure Quality First';
-              else lockReason = `Answer ${firstUnansweredPrevStep.name} First`;
+              if (firstUnansweredPrevStep.id === 'firmware') lockReason = t('modals.jump.lockFirmware', 'Select Firmware First');
+              else if (firstUnansweredPrevStep.id === 'antennas') lockReason = t('modals.jump.lockAntennas', 'Select Antennas First');
+              else if (firstUnansweredPrevStep.id === 'quality') lockReason = t('modals.jump.lockQuality', 'Configure Quality First');
+              else lockReason = t('modals.jump.lockGeneric', { defaultValue: 'Answer {{name}} First', name: firstUnansweredPrevStep.name });
             }
             return (
-              <button
+              <motion.button
                 key={step.id}
                 id={`btn-jump-step-${step.id}`}
                 type="button"
                 disabled={isLocked}
+                whileHover={!isLocked ? { scale: 1.01 } : undefined}
+                whileTap={!isLocked ? { scale: 0.98 } : undefined}
                 onClick={() => {
                   if (isLocked) return;
                   onSelectStep(step.id);
                   onClose();
                 }}
-                className={`w-full p-2.5 sm:p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                className={`w-full p-2.5 sm:p-3 rounded-xl border text-left transition-colors flex flex-col justify-between select-none ${
                   isLocked
                     ? 'border-neutral-200 bg-neutral-100/70 text-neutral-400 opacity-60 cursor-not-allowed'
                     : isCurrent
@@ -122,11 +156,11 @@ export const JumpQuestionModal: React.FC<JumpQuestionModalProps> = ({
                 <div className="flex items-center justify-between w-full">
                   <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                     <span className={`text-sm font-bold ${isCurrent ? 'text-white' : isLocked ? 'text-neutral-400' : 'text-neutral-900'}`}>
-                      {step.name}
+                      {t(`steps.${step.id}.name`, step.name)}
                     </span>
                     {isCurrent && (
                       <span className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 bg-neutral-800 text-neutral-200 rounded">
-                        Current
+                        {t('common.current', 'Current')}
                       </span>
                     )}
                     {isLocked && lockReason && (
@@ -155,7 +189,7 @@ export const JumpQuestionModal: React.FC<JumpQuestionModalProps> = ({
 
                 {/* Step Description */}
                 <p className={`text-xs mt-0.5 ${isCurrent ? 'text-neutral-300' : isLocked ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                  {step.description}
+                  {t(`steps.${step.id}.description`, step.description)}
                 </p>
 
                 {/* Color-Coded Compact A1-A4 Badges for Quality & Type steps */}
@@ -253,22 +287,25 @@ export const JumpQuestionModal: React.FC<JumpQuestionModalProps> = ({
                     })}
                   </div>
                 )}
-              </button>
+              </motion.button>
             );
           })}
         </div>
 
         <div className="mt-5 pt-3 border-t border-neutral-100 flex items-center justify-end">
-          <button
+          <motion.button
             id="btn-close-jump-cancel"
             type="button"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
             onClick={onClose}
             className="px-4 py-1.5 text-xs sm:text-sm font-semibold text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition-colors cursor-pointer"
           >
-            Close
-          </button>
+            {t('common.close', 'Close')}
+          </motion.button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
+

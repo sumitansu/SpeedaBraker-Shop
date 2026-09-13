@@ -1,5 +1,11 @@
-import { UpperBoxConfig, LowerSlotConfig, AntennaDbiType } from '../types';
-import { calculateTotalPrice } from './pricing';
+import { UpperBoxConfig, LowerSlotConfig, AntennaDbiType, AppliedPromo } from '../types';
+import { calculateTotalPrice, PRICING_CATALOG } from './pricing';
+import {
+  calculateDiscount,
+  extractPromoTierFromCustomerCode,
+  extractBaseCustomerCode,
+  getPromoDetailsByTier,
+} from './promoCodes';
 
 /**
  * Ultra-compact deterministic item code generator.
@@ -44,7 +50,8 @@ export function generateBoughtItemCode(
     const slot = slots.find((s) => s.id === slotId);
     if (!slot || slot.value.toLowerCase() === 'none') return 0;
     const isPowerful = slot.value.toLowerCase() === 'powerful';
-    const dbi = antennaDbiTypes[slotId];
+    const rawDbi = antennaDbiTypes[slotId];
+    const dbi = rawDbi ? rawDbi.toLowerCase().replace(/\s+/g, '') : '';
     let dbiOffset = 0;
     if (dbi === '6dbi') dbiOffset = 1;
     else if (dbi === '12dbi') dbiOffset = 2;
@@ -147,28 +154,39 @@ export function generateOrderDetailsJson(
   slots: LowerSlotConfig[],
   antennaDbiTypes: Record<number, AntennaDbiType | undefined>,
   customerCode: string,
-  invoiceNumber: string
+  invoiceNumber: string,
+  appliedPromo?: AppliedPromo | null
 ) {
   const versionVal = upperBoxes.find((b) => b.label.toLowerCase() === 'version')?.value || 'None';
   const displayVal = upperBoxes.find((b) => b.label.toLowerCase() === 'display')?.value || 'None';
   const wirelessVal = upperBoxes.find((b) => b.label.toLowerCase() === 'wireless')?.value || 'None';
 
   const itemCode = generateBoughtItemCode(upperBoxes, slots, antennaDbiTypes);
-  const MANDATORY_MODULES_COST = 500;
+  const MANDATORY_MODULES_COST = PRICING_CATALOG.mandatoryModules;
   const configuredSubtotal = calculateTotalPrice(upperBoxes, slots, antennaDbiTypes);
   const grandTotal = configuredSubtotal + MANDATORY_MODULES_COST;
+  const { discountAmount, finalTotal } = calculateDiscount(grandTotal, appliedPromo || null);
+  const baseCustomerCode = extractBaseCustomerCode(customerCode);
+  const promoTier = extractPromoTierFromCustomerCode(customerCode);
 
-  const versionPrice = versionVal === 'V1' ? 100 : versionVal === 'V2' ? 300 : 0;
-  const displayPrice = displayVal === 'Yes' ? 300 : 0;
-  const wirelessPrice = wirelessVal === 'Yes' ? 700 : 0;
+  const versionPrice =
+    versionVal === 'V1'
+      ? PRICING_CATALOG.version.V1
+      : versionVal === 'V2'
+      ? PRICING_CATALOG.version.V2
+      : 0;
+  const displayPrice = displayVal === 'Yes' ? PRICING_CATALOG.display.Yes : 0;
+  const wirelessPrice = wirelessVal === 'Yes' ? PRICING_CATALOG.wireless.Yes : 0;
 
   const activeSlots = slots.filter((s) => s.value.toLowerCase() !== 'none');
   const antennaDetails = activeSlots.map((slot) => {
-    const quality = slot.value.toLowerCase() as 'normal' | 'powerful';
+    const isPowerful = slot.value.toLowerCase() === 'powerful';
     const dbi = antennaDbiTypes[slot.id] || '0dbi';
-    const socketMountCost = 50;
-    const qualityModuleCost = quality === 'normal' ? 200 : 700;
-    const dbiRadiatorCost = dbi === '0dbi' ? 100 : dbi === '6dbi' ? 150 : 450;
+    const socketMountCost = PRICING_CATALOG.antenna.baseSocket;
+    const qualityModuleCost = isPowerful
+      ? PRICING_CATALOG.antenna.quality.Powerful
+      : PRICING_CATALOG.antenna.quality.Normal;
+    const dbiRadiatorCost = PRICING_CATALOG.antenna.dbi[dbi as keyof typeof PRICING_CATALOG.antenna.dbi] || 0;
     const channelTotal = socketMountCost + qualityModuleCost + dbiRadiatorCost;
 
     return {
@@ -195,6 +213,8 @@ export function generateOrderDetailsJson(
       invoiceNumber,
       itemCode,
       customerCode,
+      baseCustomerCode,
+      promoTier: promoTier || (appliedPromo ? appliedPromo.tierId : null),
       date: new Date().toLocaleDateString('en-IN', {
         year: 'numeric',
         month: 'short',
@@ -203,6 +223,19 @@ export function generateOrderDetailsJson(
       currency: 'INR',
       currencySymbol: '₹',
     },
+    promoDiscount: appliedPromo
+      ? {
+          applied: true,
+          label: appliedPromo.label,
+          tierId: appliedPromo.tierId,
+          type: appliedPromo.type,
+          value: appliedPromo.value,
+          discountAmount,
+        }
+      : {
+          applied: false,
+          discountAmount: 0,
+        },
     items: {
       baseHardware: {
         mandatoryCoreModules: {
@@ -247,7 +280,9 @@ export function generateOrderDetailsJson(
       firmwareSubtotal: versionPrice,
       addOnsSubtotal: displayPrice + wirelessPrice,
       antennasSubtotal,
-      grandTotal,
+      itemsSubtotal: grandTotal,
+      discountAmount,
+      payableTotal: finalTotal,
       taxNote: 'All tax and GST included',
     },
     verificationDecodedSpec: decodeBoughtItemCode(itemCode),
@@ -255,14 +290,17 @@ export function generateOrderDetailsJson(
 }
 
 /**
- * Triggers client-side download of the custom JSON order file with .sbs extension.
+ * Triggers client-side download of the custom order file with strict .sbs extension.
+ * Using 'application/octet-stream' prevents Chromium/Chrome from auto-appending '.json'
+ * to the filename, while preserving clean formatted JSON text inside the file.
+ * Converting or renaming this .sbs file to .json will revert to standard JSON.
  */
 export function downloadSbsFile(
   invoiceNumber: string,
   orderDetails: ReturnType<typeof generateOrderDetailsJson>
 ) {
   const jsonContent = JSON.stringify(orderDetails, null, 2);
-  const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8' });
+  const blob = new Blob([jsonContent], { type: 'application/octet-stream' });
   const downloadUrl = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = downloadUrl;
@@ -278,57 +316,287 @@ export interface ParsedImportResult {
   itemCode: string;
   customerCode?: string;
   invoiceNumber?: string;
+  appliedPromo?: AppliedPromo | null;
 }
 
 /**
- * Parses raw text input (from clipboard or manual entry) into either
+ * Normalizes an item code and checks if it's within the valid Base36 range (0..28811).
+ */
+function validateBase36ItemCode(codeCandidate: string): string | null {
+  if (!codeCandidate) return null;
+  const cleaned = codeCandidate.trim().toUpperCase();
+  if (/^[0-9A-Z]{3}$/.test(cleaned)) {
+    const val = parseInt(cleaned, 36);
+    if (!isNaN(val) && val >= 0 && val <= 28811) {
+      return cleaned;
+    }
+  }
+  return null;
+}
+
+/**
+ * Attempts to parse raw hardware specifications from a custom .sbs JSON object
+ * and re-computes the corresponding 3-character item code.
+ */
+function parseHardwareSpecFromJson(obj: Record<string, any>): ParsedImportResult | null {
+  if (!obj || typeof obj !== 'object') return null;
+
+  // 1. Version extraction
+  let rawVersion =
+    obj.version ??
+    obj.firmware ??
+    obj.firmwareVersion ??
+    obj.items?.baseHardware?.firmware?.selectedVersion ??
+    obj.baseHardware?.firmware?.selectedVersion;
+
+  let version: 'V1' | 'V2' | null = null;
+  if (typeof rawVersion === 'string') {
+    if (/V2/i.test(rawVersion)) version = 'V2';
+    else if (/V1/i.test(rawVersion)) version = 'V1';
+  } else if (rawVersion === 2) {
+    version = 'V2';
+  } else if (rawVersion === 1) {
+    version = 'V1';
+  }
+
+  if (!version) return null;
+
+  // 2. Display extraction
+  const rawDisplay =
+    obj.display ??
+    obj.oled ??
+    obj.items?.addOns?.display?.selected ??
+    obj.addOns?.display?.selected;
+  const isDisplay =
+    rawDisplay === true ||
+    rawDisplay === 1 ||
+    rawDisplay === 'Yes' ||
+    rawDisplay === 'yes' ||
+    rawDisplay === 'true';
+
+  // 3. Wireless extraction
+  const rawWireless =
+    obj.wireless ??
+    obj.wifi ??
+    obj.items?.addOns?.wireless?.selected ??
+    obj.addOns?.wireless?.selected;
+  const isWireless =
+    rawWireless === true ||
+    rawWireless === 1 ||
+    rawWireless === 'Yes' ||
+    rawWireless === 'yes' ||
+    rawWireless === 'true';
+
+  // 4. Slots / Channels extraction
+  const rawChannels =
+    obj.slots ??
+    obj.antennas?.channels ??
+    obj.items?.antennas?.channels ??
+    obj.channels ??
+    (Array.isArray(obj.antennas) ? obj.antennas : null);
+
+  const upperBoxes: UpperBoxConfig[] = [
+    { id: '1', label: 'Version', value: version },
+    { id: '2', label: 'Display', value: isDisplay ? 'Yes' : 'No' },
+    { id: '3', label: 'Wireless', value: isWireless ? 'Yes' : 'No' },
+  ];
+
+  const slots: LowerSlotConfig[] = [1, 2, 3, 4].map((id) => ({
+    id,
+    label: `Antenna ${id}`,
+    value: 'None',
+  }));
+
+  const antennaDbiTypes: Record<number, AntennaDbiType | undefined> = {};
+
+  if (Array.isArray(rawChannels)) {
+    rawChannels.forEach((ch, idx) => {
+      if (!ch || typeof ch !== 'object') return;
+      const slotId = ch.channelSlotId ?? ch.slotId ?? ch.slot ?? ch.id ?? idx + 1;
+      if (typeof slotId !== 'number' || slotId < 1 || slotId > 4) return;
+
+      const qRaw = String(ch.qualityModule ?? ch.quality ?? ch.value ?? ch.type ?? '');
+      const isPowerful = /powerful/i.test(qRaw);
+      const isNormal = /normal/i.test(qRaw);
+      const isNone = /none/i.test(qRaw) || (!isPowerful && !isNormal);
+
+      if (!isNone) {
+        const slotObj = slots.find((s) => s.id === slotId);
+        if (slotObj) {
+          slotObj.value = isPowerful ? 'Powerful' : 'Normal';
+        }
+
+        const dbiRaw = String(ch.radiatorGain ?? ch.dbi ?? ch.gain ?? ch.dBi ?? '').toLowerCase();
+        if (dbiRaw.includes('12')) {
+          antennaDbiTypes[slotId] = '12dbi';
+        } else if (dbiRaw.includes('6')) {
+          antennaDbiTypes[slotId] = '6dbi';
+        } else {
+          antennaDbiTypes[slotId] = '0dbi';
+        }
+      }
+    });
+  } else if (obj.antennas && typeof obj.antennas === 'object' && !Array.isArray(obj.antennas)) {
+    // Key-value object of antennas: e.g. { "1": { "quality": "Normal", "dbi": "0dbi" } }
+    for (let slotId = 1; slotId <= 4; slotId++) {
+      const ch = obj.antennas[slotId] || obj.antennas[`slot${slotId}`] || obj.antennas[`antenna${slotId}`];
+      if (ch) {
+        const qRaw = String(ch.qualityModule ?? ch.quality ?? ch.value ?? ch.type ?? '');
+        const isPowerful = /powerful/i.test(qRaw);
+        const isNormal = /normal/i.test(qRaw);
+        if (isPowerful || isNormal) {
+          const slotObj = slots.find((s) => s.id === slotId);
+          if (slotObj) {
+            slotObj.value = isPowerful ? 'Powerful' : 'Normal';
+          }
+          const dbiRaw = String(ch.radiatorGain ?? ch.dbi ?? ch.gain ?? '').toLowerCase();
+          if (dbiRaw.includes('12')) antennaDbiTypes[slotId] = '12dbi';
+          else if (dbiRaw.includes('6')) antennaDbiTypes[slotId] = '6dbi';
+          else antennaDbiTypes[slotId] = '0dbi';
+        }
+      }
+    }
+  }
+
+  try {
+    const itemCode = generateBoughtItemCode(upperBoxes, slots, antennaDbiTypes);
+    return {
+      type: 'item_code',
+      itemCode,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parses raw text input (from clipboard, file upload, or manual entry) into either
  * an item configuration code or a full invoice ID.
+ * Robust against custom .sbs JSON formats, BOM characters, markdown code fences, and text templates.
  */
 export function parseImportInput(rawInput: string): ParsedImportResult | null {
   if (!rawInput) return null;
   let trimmed = rawInput.trim();
   if (!trimmed) return null;
 
-  // 1. JSON string from an exported .sbs file
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+  // 1. Strip UTF-8 BOM (\uFEFF) and zero-width spaces
+  trimmed = trimmed.replace(/^[\uFEFF\u200B]+/, '').trim();
+
+  // 2. Unwrap markdown code blocks if pasted as ```json ... ``` or ```sbs ... ```
+  const codeBlockMatch = trimmed.match(/^```(?:json|sbs|text)?\s*([\s\S]*?)\s*```$/i);
+  if (codeBlockMatch) {
+    trimmed = codeBlockMatch[1].trim();
+  }
+
+  // 3. Try parsing JSON (supports standard .sbs, custom .sbs, and converted .json files)
+  const firstBrace = trimmed.indexOf('{');
+  const lastBrace = trimmed.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    const jsonCandidate = trimmed.slice(firstBrace, lastBrace + 1);
     try {
-      const parsed = JSON.parse(trimmed);
-      if (parsed.invoice?.invoiceNumber) {
-        return parseImportInput(parsed.invoice.invoiceNumber);
+      // Remove JS comments if present (e.g. // or /* */)
+      const sanitized = jsonCandidate
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/.*/g, '');
+      const parsed = JSON.parse(sanitized);
+
+      // 3a. Standard exported SBS JSON
+      if (parsed.invoice) {
+        if (typeof parsed.invoice === 'string') {
+          const res = parseImportInput(parsed.invoice);
+          if (res) return res;
+        }
+        if (parsed.invoice.invoiceNumber) {
+          const res = parseImportInput(parsed.invoice.invoiceNumber);
+          if (res) return res;
+        }
+        if (parsed.invoice.itemCode) {
+          const validated = validateBase36ItemCode(parsed.invoice.itemCode);
+          if (validated) {
+            return {
+              type: parsed.invoice.invoiceNumber ? 'invoice' : 'item_code',
+              itemCode: validated,
+              customerCode: parsed.invoice.customerCode,
+              invoiceNumber: parsed.invoice.invoiceNumber,
+            };
+          }
+        }
       }
-      if (parsed.invoice?.itemCode) {
-        return parseImportInput(parsed.invoice.itemCode);
+
+      // 3b. Direct code properties in custom .sbs JSON
+      const directCode =
+        parsed.itemCode ||
+        parsed.item_code ||
+        parsed.code ||
+        parsed.boughtItemCode ||
+        parsed.order?.itemCode ||
+        parsed.data?.itemCode;
+      if (typeof directCode === 'string') {
+        const validated = validateBase36ItemCode(directCode);
+        if (validated) {
+          const invNum = parsed.invoiceNumber || parsed.invoice_number || parsed.id;
+          const custCode = parsed.customerCode ? extractBaseCustomerCode(parsed.customerCode) : undefined;
+          let promo = null;
+          if (parsed.promoDiscount?.applied && parsed.promoDiscount?.tierId) {
+            promo = getPromoDetailsByTier(parsed.promoDiscount.tierId, 0, parsed.promoDiscount.label);
+          }
+          return {
+            type: invNum ? 'invoice' : 'item_code',
+            itemCode: validated,
+            customerCode: custCode,
+            invoiceNumber: invNum,
+            appliedPromo: promo,
+          };
+        }
+      }
+
+      // 3c. Direct invoiceNumber property in custom .sbs JSON
+      const directInvoice =
+        parsed.invoiceNumber ||
+        parsed.invoice_number ||
+        parsed.orderId ||
+        parsed.order_id ||
+        parsed.id;
+      if (typeof directInvoice === 'string') {
+        const res = parseImportInput(directInvoice);
+        if (res) return res;
+      }
+
+      // 3d. Hardware specification object inside custom .sbs JSON
+      const hardwareResult = parseHardwareSpecFromJson(parsed);
+      if (hardwareResult) {
+        return hardwareResult;
       }
     } catch {
-      // Continue to text checks
+      // Continue to textual regex extraction
     }
   }
 
   // Remove surrounding quotes if any
   trimmed = trimmed.replace(/^["']|["']$/g, '').trim();
 
-  // 2. Full invoice ID: SBS-<itemCode>-<customerCode>
-  const fullInvoiceMatch = trimmed.match(/\bSBS\s*-\s*([0-9A-Z]{3})\s*-\s*([0-9A-Z]{3,12})\b/i);
+  // 4. Full invoice ID: SBS-<itemCode>-<customerCode>
+  const fullInvoiceMatch = trimmed.match(/\bSBS\s*-\s*([0-9A-Z]{3})\s*-\s*([0-9A-Z]{3,16})\b/i);
   if (fullInvoiceMatch) {
-    const itemCode = fullInvoiceMatch[1].toUpperCase();
-    const customerCode = fullInvoiceMatch[2].toUpperCase();
-    const intVal = parseInt(itemCode, 36);
-    if (!isNaN(intVal) && intVal >= 0 && intVal <= 28811) {
+    const itemCode = validateBase36ItemCode(fullInvoiceMatch[1]);
+    if (itemCode) {
+      const rawCustomerCode = fullInvoiceMatch[2].toUpperCase();
+      const customerCode = extractBaseCustomerCode(rawCustomerCode);
       return {
         type: 'invoice',
         itemCode,
         customerCode,
         invoiceNumber: `SBS-${itemCode}-${customerCode}`,
+        appliedPromo: null, // Must be verified against Firebase Firestore database
       };
     }
   }
 
-  // 3. Partial invoice prefix: SBS-<itemCode> (without customer code)
+  // 5. Partial invoice prefix: SBS-<itemCode> (without customer code)
   const prefixMatch = trimmed.match(/\bSBS\s*-\s*([0-9A-Z]{3})\b/i);
   if (prefixMatch) {
-    const itemCode = prefixMatch[1].toUpperCase();
-    const intVal = parseInt(itemCode, 36);
-    if (!isNaN(intVal) && intVal >= 0 && intVal <= 28811) {
+    const itemCode = validateBase36ItemCode(prefixMatch[1]);
+    if (itemCode) {
       return {
         type: 'item_code',
         itemCode,
@@ -336,16 +604,25 @@ export function parseImportInput(rawInput: string): ParsedImportResult | null {
     }
   }
 
-  // 4. Pure 3-character item code (e.g. "7KF")
-  if (/^[0-9A-Z]{3}$/i.test(trimmed)) {
-    const itemCode = trimmed.toUpperCase();
-    const intVal = parseInt(itemCode, 36);
-    if (!isNaN(intVal) && intVal >= 0 && intVal <= 28811) {
+  // 6. Labelled item code in plain text: e.g. "itemCode: 7KF" or "code = 7KF"
+  const labelledMatch = trimmed.match(/(?:item_?code|code|bought_?code)\s*[:=]\s*["']?([0-9A-Z]{3})["']?/i);
+  if (labelledMatch) {
+    const itemCode = validateBase36ItemCode(labelledMatch[1]);
+    if (itemCode) {
       return {
         type: 'item_code',
         itemCode,
       };
     }
+  }
+
+  // 7. Pure 3-character item code (e.g. "7KF")
+  const direct3Char = validateBase36ItemCode(trimmed);
+  if (direct3Char) {
+    return {
+      type: 'item_code',
+      itemCode: direct3Char,
+    };
   }
 
   return null;

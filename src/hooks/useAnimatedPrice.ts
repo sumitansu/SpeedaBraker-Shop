@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 
-export function useAnimatedPrice(targetValue: number, duration: number = 400) {
+export function useAnimatedPrice(targetValue: number, duration: number = 300) {
   const [displayValue, setDisplayValue] = useState(targetValue);
   const [diff, setDiff] = useState<number | null>(null);
   const [direction, setDirection] = useState<'up' | 'down' | 'idle'>('idle');
@@ -22,7 +22,7 @@ export function useAnimatedPrice(targetValue: number, duration: number = 400) {
       diffTimeoutRef.current = window.setTimeout(() => {
         setDiff(null);
         setDirection('idle');
-      }, 1200);
+      }, 1000);
     }
 
     if (startValue === endValue) {
@@ -32,6 +32,7 @@ export function useAnimatedPrice(targetValue: number, duration: number = 400) {
 
     const startTime = performance.now();
     let animationFrameId: number;
+    let lastRenderedVal = startValue;
 
     const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
@@ -41,8 +42,13 @@ export function useAnimatedPrice(targetValue: number, duration: number = 400) {
       const eased = easeOutCubic(progress);
 
       const nextVal = Math.round(startValue + (endValue - startValue) * eased);
-      currentValueRef.current = nextVal;
-      setDisplayValue(nextVal);
+      
+      // Only trigger React state update if the rounded value actually changed
+      if (nextVal !== lastRenderedVal || progress >= 1) {
+        lastRenderedVal = nextVal;
+        currentValueRef.current = nextVal;
+        setDisplayValue(nextVal);
+      }
 
       if (progress < 1) {
         animationFrameId = requestAnimationFrame(step);
@@ -69,3 +75,4 @@ export function useAnimatedPrice(targetValue: number, duration: number = 400) {
 
   return { displayValue, diff, direction };
 }
+

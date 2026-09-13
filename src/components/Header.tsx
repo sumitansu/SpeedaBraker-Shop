@@ -1,41 +1,58 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { RotateCcw, ArrowLeft, Download, Check, Upload } from 'lucide-react';
+import { RotateCcw, ArrowLeft, Download, Check, LogIn } from 'lucide-react';
+import { motion } from 'motion/react';
+import { useTranslation } from 'react-i18next';
 
 interface HeaderProps {
   showBillCanvas?: boolean;
+  showAdminCanvas?: boolean;
   onBackToConfig?: () => void;
   onDownloadInvoice?: () => void;
   invoiceNumber?: string;
   onResetClick: () => void;
   onImportClick: () => void;
+  onLoginClick?: () => void;
+  onOpenAdminCanvas?: () => void;
+  isLoggedIn?: boolean;
+  currentAdminUser?: string | null;
 }
 
-export const Header: React.FC<HeaderProps> = ({
+export const Header: React.FC<HeaderProps> = React.memo(({
   showBillCanvas = false,
+  showAdminCanvas = false,
   onBackToConfig,
   onDownloadInvoice,
   invoiceNumber = '',
   onResetClick,
   onImportClick,
+  onLoginClick,
+  onOpenAdminCanvas,
+  isLoggedIn = false,
+  currentAdminUser = null,
 }) => {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const [isPressing, setIsPressing] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPressRef = useRef(false);
   const preventClickRef = useRef(false);
 
+  // Reset / Import hold timer refs
+  const [isResetPressing, setIsResetPressing] = useState(false);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isResetLongPressRef = useRef(false);
+  const preventResetClickRef = useRef(false);
+
   useEffect(() => {
     return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
     };
   }, []);
 
   const triggerCopy = () => {
     if (invoiceNumber && navigator.clipboard) {
       navigator.clipboard.writeText(invoiceNumber).catch(() => {
-        // Fallback for older browsers
         const textarea = document.createElement('textarea');
         textarea.value = invoiceNumber;
         document.body.appendChild(textarea);
@@ -54,7 +71,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const handlePointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0) return; // Only primary mouse/touch button
+    if (e.button !== 0) return;
     isLongPressRef.current = false;
     preventClickRef.current = false;
     setIsPressing(true);
@@ -64,7 +81,7 @@ export const Header: React.FC<HeaderProps> = ({
       preventClickRef.current = true;
       setIsPressing(false);
       triggerCopy();
-    }, 500); // 500ms hold threshold
+    }, 500);
   };
 
   const handlePointerUp = () => {
@@ -73,11 +90,6 @@ export const Header: React.FC<HeaderProps> = ({
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    if (!isLongPressRef.current) {
-      // Normal click -> trigger download
-      onDownloadInvoice?.();
-    }
-    isLongPressRef.current = false;
   };
 
   const handlePointerCancel = () => {
@@ -90,100 +102,217 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const handleClick = (e: React.MouseEvent) => {
-    // Prevent default click if a long press already consumed the action
     if (preventClickRef.current) {
       e.preventDefault();
       preventClickRef.current = false;
+      return;
     }
+    onDownloadInvoice?.();
+  };
+
+  const handleResetPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    isResetLongPressRef.current = false;
+    preventResetClickRef.current = false;
+    setIsResetPressing(true);
+
+    resetTimerRef.current = setTimeout(() => {
+      isResetLongPressRef.current = true;
+      preventResetClickRef.current = true;
+      setIsResetPressing(false);
+      if (navigator.vibrate) {
+        navigator.vibrate(30);
+      }
+      onImportClick();
+    }, 500);
+  };
+
+  const handleResetPointerUp = () => {
+    setIsResetPressing(false);
+    if (resetTimerRef.current) {
+      clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = null;
+    }
+  };
+
+  const handleResetPointerCancel = () => {
+    setIsResetPressing(false);
+    if (resetTimerRef.current) {
+      clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = null;
+    }
+    isResetLongPressRef.current = false;
+  };
+
+  const handleResetClick = (e: React.MouseEvent) => {
+    if (preventResetClickRef.current) {
+      e.preventDefault();
+      preventResetClickRef.current = false;
+      return;
+    }
+    onResetClick();
   };
 
   return (
     <header
       id="app-header"
-      className="h-14 px-3 sm:px-6 bg-white border-b border-neutral-200 flex items-center justify-between shadow-xs z-10 shrink-0 print:hidden select-none"
+      className="h-14 px-3 sm:px-6 bg-white border-b border-neutral-200 flex items-center justify-between shadow-xs z-30 shrink-0 print:hidden select-none"
     >
       <div id="header-brand" className="flex items-center space-x-2 min-w-0">
-        <h1 className="text-base sm:text-xl font-bold tracking-tight text-neutral-900 truncate">
-          Speedabraker's Shop
-        </h1>
+        <motion.h1
+          whileHover={{ scale: 1.01 }}
+          className="text-base sm:text-xl font-black tracking-tight text-neutral-900 truncate font-mono cursor-default"
+        >
+          {t('app.title', "Speedabraker's Shop")}
+        </motion.h1>
         {showBillCanvas && (
-          <span className="hidden xs:inline text-xs font-semibold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-md border border-neutral-200">
-            Invoice
-          </span>
+          <motion.span
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="hidden xs:inline text-xs font-semibold text-neutral-700 bg-neutral-100 px-2 py-0.5 rounded-md border border-neutral-200"
+          >
+            {t('header.viewBill', 'Invoice')}
+          </motion.span>
+        )}
+        {showAdminCanvas && (
+          <motion.span
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="hidden xs:inline text-xs font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200"
+          >
+            {t('header.adminPortal', 'Admin Panel')}
+          </motion.span>
         )}
       </div>
 
       <div id="header-actions-container" className="relative flex items-center gap-1.5 sm:gap-2 shrink-0">
-        {showBillCanvas ? (
+        {showAdminCanvas ? (
+          <motion.button
+            id="btn-header-back-config-from-admin"
+            type="button"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.96 }}
+            onClick={onBackToConfig}
+            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300 rounded-lg transition-colors border border-neutral-300 cursor-pointer whitespace-nowrap shadow-2xs"
+            title={t('bill.backToConfig', 'Back to Configuration')}
+          >
+            <ArrowLeft className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
+            <span className="hidden sm:inline">{t('bill.backToConfig', 'Back to Config')}</span>
+            <span className="sm:hidden">{t('steps.previous', 'Back')}</span>
+          </motion.button>
+        ) : showBillCanvas ? (
           <>
-            <button
+            <motion.button
               id="btn-header-back-config"
               type="button"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.96 }}
               onClick={onBackToConfig}
               className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300 rounded-lg transition-colors border border-neutral-300 cursor-pointer whitespace-nowrap"
-              title="Back to Configuration"
+              title={t('bill.backToConfig', 'Back to Configuration')}
             >
               <ArrowLeft className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
-              <span className="hidden sm:inline">Back to Config</span>
-              <span className="sm:hidden">Back</span>
-            </button>
+              <span className="hidden sm:inline">{t('bill.backToConfig', 'Back to Config')}</span>
+              <span className="sm:hidden">{t('steps.previous', 'Back')}</span>
+            </motion.button>
 
-            <button
+            <motion.button
               id="btn-header-download-invoice"
               type="button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
               onPointerDown={handlePointerDown}
               onPointerUp={handlePointerUp}
               onPointerLeave={handlePointerCancel}
               onPointerCancel={handlePointerCancel}
               onClick={handleClick}
-              className={`relative flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg shadow-2xs transition-all cursor-pointer whitespace-nowrap select-none active:scale-98 ${
+              className={`relative flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg shadow-2xs transition-all cursor-pointer whitespace-nowrap select-none ${
                 copied
                   ? 'bg-emerald-600 text-white hover:bg-emerald-700 ring-2 ring-emerald-500/40'
                   : isPressing
                   ? 'bg-neutral-800 text-neutral-200 scale-98 ring-2 ring-neutral-400/50'
                   : 'bg-neutral-900 hover:bg-black text-white'
               }`}
-              title="Click to download .sbs invoice, hold to copy Invoice ID"
+              title={t('topGrid.copyCode', 'Click to download .sbs invoice, hold to copy Invoice ID')}
             >
               {copied ? (
                 <>
                   <Check className="w-3.5 h-3.5 text-white shrink-0" />
-                  <span>Invoice ID Copied!</span>
+                  <span>{t('topGrid.copied', 'Invoice ID Copied!')}</span>
                 </>
               ) : (
                 <>
                   <Download className="w-3.5 h-3.5 shrink-0" />
-                  <span>Download Invoice</span>
+                  <span>{t('bill.exportSBS', 'Download Invoice')}</span>
                 </>
               )}
-            </button>
+            </motion.button>
           </>
         ) : (
-          <div id="header-config-actions" className="flex items-center gap-1.5 sm:gap-2">
-            <button
-              id="btn-reset"
-              type="button"
-              onClick={onResetClick}
-              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-700 bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300 rounded-lg transition-colors border border-neutral-300 cursor-pointer whitespace-nowrap shadow-2xs"
-              title="Reset configuration"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
-              <span>Reset</span>
-            </button>
+          <motion.button
+            id="btn-reset"
+            type="button"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.96 }}
+            onPointerDown={handleResetPointerDown}
+            onPointerUp={handleResetPointerUp}
+            onPointerLeave={handleResetPointerCancel}
+            onPointerCancel={handleResetPointerCancel}
+            onClick={handleResetClick}
+            className={`relative flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition-all border border-neutral-300 cursor-pointer whitespace-nowrap shadow-2xs select-none ${
+              isResetPressing
+                ? 'bg-neutral-200 text-neutral-900 ring-2 ring-neutral-400/40 scale-98'
+                : 'text-neutral-700 bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300'
+            }`}
+            title={t('header.resetTooltip', 'Click to reset, hold to import configuration')}
+          >
+            <RotateCcw
+              className={`w-3.5 h-3.5 text-neutral-600 shrink-0 transition-transform duration-200 ${
+                isResetPressing ? '-rotate-90 text-neutral-900' : ''
+              }`}
+            />
+            <span>{t('header.reset', 'Reset')}</span>
+          </motion.button>
+        )}
 
-            <button
-              id="btn-import"
+        {!showBillCanvas && (
+          isLoggedIn ? (
+            <motion.button
+              id="btn-login"
               type="button"
-              onClick={onImportClick}
-              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-800 bg-white hover:bg-neutral-50 active:bg-neutral-100 rounded-lg transition-colors border border-neutral-300 hover:border-neutral-400 cursor-pointer whitespace-nowrap shadow-2xs"
-              title="Import Item Code or Invoice ID"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={onOpenAdminCanvas || onLoginClick}
+              className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition-colors border cursor-pointer whitespace-nowrap shadow-2xs ${
+                showAdminCanvas
+                  ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700'
+                  : 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 border-emerald-300 hover:border-emerald-400'
+              }`}
+              title={`Admin: ${currentAdminUser || 'Admin'}`}
             >
-              <Upload className="w-3.5 h-3.5 text-neutral-700 shrink-0" />
-              <span>Import</span>
-            </button>
-          </div>
+              <Check className={`w-3.5 h-3.5 stroke-[2.5] shrink-0 ${showAdminCanvas ? 'text-white' : 'text-emerald-600'}`} />
+              <span className="truncate max-w-[80px] sm:max-w-[120px]">{currentAdminUser || t('header.adminPortal', 'Admin')}</span>
+            </motion.button>
+          ) : (
+            <motion.button
+              id="btn-login"
+              type="button"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={onLoginClick}
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-800 hover:text-neutral-900 bg-white hover:bg-neutral-50 active:bg-neutral-100 rounded-lg transition-colors border border-neutral-300 hover:border-neutral-400 cursor-pointer whitespace-nowrap shadow-2xs"
+              title={t('header.adminLogin', 'Admin Login')}
+            >
+              <LogIn className="w-3.5 h-3.5 text-neutral-700 shrink-0" />
+              <span>{t('header.adminLogin', 'Login')}</span>
+            </motion.button>
+          )
         )}
       </div>
     </header>
   );
-};
+});
+
+Header.displayName = 'Header';
+
+

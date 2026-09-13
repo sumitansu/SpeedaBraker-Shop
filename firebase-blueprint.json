@@ -1,0 +1,178 @@
+{
+  "entities": {
+    "PromoCode": {
+      "title": "PromoCode",
+      "description": "Authorized promotional discount code stored in Firestore",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Uppercase promo code identifier",
+          "minLength": 3,
+          "maxLength": 32
+        },
+        "type": {
+          "type": "string",
+          "description": "Discount calculation type",
+          "enum": ["percent", "flat", "fixed"]
+        },
+        "value": {
+          "type": "number",
+          "description": "Discount percentage or fixed rupee deduction"
+        },
+        "label": {
+          "type": "string",
+          "description": "Human-readable label for the discount"
+        },
+        "minOrderValue": {
+          "type": "number",
+          "description": "Minimum pre-discount subtotal required"
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether this promo code is currently valid"
+        }
+      },
+      "required": ["code", "type", "value", "label", "minOrderValue", "active"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Verified order record and invoice saved in Firestore",
+      "type": "object",
+      "properties": {
+        "invoiceNumber": {
+          "type": "string",
+          "description": "Full invoice identifier SBS-XXX-XXXXXX",
+          "maxLength": 64
+        },
+        "itemCode": {
+          "type": "string",
+          "description": "Base-36 hardware configuration code",
+          "maxLength": 16
+        },
+        "customerCode": {
+          "type": "string",
+          "description": "Clean customer identifier without spoofable tags",
+          "maxLength": 32
+        },
+        "appliedPromoCode": {
+          "type": "string",
+          "description": "Promo code used if verified in database"
+        },
+        "itemsSubtotal": {
+          "type": "number",
+          "description": "Configured hardware total before discount"
+        },
+        "discountAmount": {
+          "type": "number",
+          "description": "Authentic discount amount deducted"
+        },
+        "payableTotal": {
+          "type": "number",
+          "description": "Final payable total after verified discount"
+        },
+        "verificationHash": {
+          "type": "string",
+          "description": "Cryptographic tamper-evident hash of the order"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of order creation"
+        }
+      },
+      "required": [
+        "invoiceNumber",
+        "itemCode",
+        "customerCode",
+        "itemsSubtotal",
+        "discountAmount",
+        "payableTotal",
+        "verificationHash"
+      ]
+    },
+    "AdminAccount": {
+      "title": "AdminAccount",
+      "description": "Administrator account credentials and role metadata",
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string",
+          "description": "Unique admin username",
+          "minLength": 3,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_]+$"
+        },
+        "role": {
+          "type": "string",
+          "description": "Administrative role level",
+          "enum": ["admin", "superadmin"]
+        },
+        "passwordHash": {
+          "type": "string",
+          "description": "Salted SHA-256 cryptographic password hash",
+          "maxLength": 128
+        },
+        "salt": {
+          "type": "string",
+          "description": "Unique cryptographic salt for password hashing",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of account creation"
+        }
+      },
+      "required": ["username", "role", "passwordHash", "salt"]
+    },
+    "ProductStock": {
+      "title": "ProductStock",
+      "description": "Inventory stock availability for modular hardware items",
+      "type": "object",
+      "properties": {
+        "productId": {
+          "type": "string",
+          "description": "Unique identifier for the modular product",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "productName": {
+          "type": "string",
+          "description": "Human-readable name of the product or option",
+          "maxLength": 128
+        },
+        "category": {
+          "type": "string",
+          "description": "Product category",
+          "enum": ["display", "wireless", "antenna_quality", "antenna_dbi"]
+        },
+        "inStock": {
+          "type": "boolean",
+          "description": "True if currently available in stock"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last stock status update"
+        }
+      },
+      "required": ["productId", "productName", "category", "inStock"]
+    }
+  },
+  "firestore": {
+    "/promo_codes/{codeId}": {
+      "schema": "PromoCode",
+      "description": "Collection of verified promo codes"
+    },
+    "/orders/{invoiceId}": {
+      "schema": "Order",
+      "description": "Collection of authentic customer orders and invoices"
+    },
+    "/admin_accounts/{username}": {
+      "schema": "AdminAccount",
+      "description": "Collection of admin user account records"
+    },
+    "/product_stock/{productId}": {
+      "schema": "ProductStock",
+      "description": "Collection of stock availability records for hardware components"
+    }
+  }
+}

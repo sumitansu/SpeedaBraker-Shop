@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened ID and Schema Validators
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidPromo(data) {
+      return data.code is string && data.code.size() <= 32 &&
+             data.type in ['percent', 'flat', 'fixed'] &&
+             data.value is number && data.value >= 0 &&
+             data.label is string && data.label.size() <= 128 &&
+             data.active is bool &&
+             data.minOrderValue is number && data.minOrderValue >= 0;
+    }
+
+    function isValidOrder(data) {
+      return data.invoiceNumber is string && data.invoiceNumber.size() <= 64 &&
+             data.itemCode is string && data.itemCode.size() <= 16 &&
+             data.customerCode is string && data.customerCode.size() <= 32 &&
+             data.itemsSubtotal is number && data.itemsSubtotal >= 0 &&
+             data.discountAmount is number && data.discountAmount >= 0 &&
+             data.payableTotal is number && data.payableTotal >= 0 &&
+             data.verificationHash is string && data.verificationHash.size() <= 128;
+    }
+
+    function isValidAdminAccount(data) {
+      return data.username is string && data.username.size() >= 3 && data.username.size() <= 32 &&
+             data.username.matches('^[a-zA-Z0-9_]+$') &&
+             data.role in ['admin', 'superadmin'] &&
+             data.passwordHash is string && data.passwordHash.size() <= 128 &&
+             data.salt is string && data.salt.size() <= 64;
+    }
+
+    function isValidProductStock(data) {
+      return data.productId is string && data.productId.size() <= 64 &&
+             data.productName is string && data.productName.size() <= 128 &&
+             data.category in ['display', 'wireless', 'antenna_quality', 'antenna_dbi'] &&
+             data.inStock is bool;
+    }
+
+    // Promo Codes Collection:
+    // Clients can read promo codes by specific document ID to validate them; list allowed for admin management
+    // Admin interface can add, update, and remove promo codes
+    match /promo_codes/{codeId} {
+      allow get: if isValidId(codeId);
+      allow list: if true;
+      allow create, update: if isValidId(codeId) && isValidPromo(request.resource.data);
+      allow delete: if isValidId(codeId);
+    }
+
+    // Orders Collection:
+    // Anyone can verify a specific order by its exact invoice ID
+    // Orders can be registered once, and are completely immutable afterwards
+    match /orders/{invoiceId} {
+      allow get: if isValidId(invoiceId);
+      allow list: if false;
+      allow create: if isValidId(invoiceId) &&
+                       request.resource.data.invoiceNumber == invoiceId &&
+                       isValidOrder(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    // Admin Accounts Collection:
+    // Secure administrative credential hashes
+    // Read allowed by exact username lookup, create for initialization seeds, update/delete denied
+    match /admin_accounts/{username} {
+      allow get: if isValidId(username);
+      allow list: if false;
+      allow create: if isValidId(username) &&
+                       request.resource.data.username == username &&
+                       isValidAdminAccount(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    // Product Stock Collection:
+    // Publicly readable so configurator knows available hardware items;
+    // Admins can toggle in-stock / out-of-stock states
+    match /product_stock/{productId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(productId) && isValidProductStock(request.resource.data);
+      allow delete: if isValidId(productId);
+    }
+  }
+}
