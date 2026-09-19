@@ -2,7 +2,7 @@ import React from 'react';
 import { AlertCircle, Monitor, MonitorOff } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import { PRICING_CATALOG } from '../../utils/pricing';
+import { PRICING_CATALOG, applyPsychologicalPricing } from '../../utils/pricing';
 
 interface DisplayStepProps {
   currentVersion: string;
@@ -10,6 +10,7 @@ interface DisplayStepProps {
   onSelectDisplay: (val: 'Yes' | 'No') => void;
   onGoToFirmware: () => void;
   stockMap?: Record<string, boolean>;
+  onOutOfStockAttempt?: (itemName: string) => void;
 }
 
 export const DisplayStep: React.FC<DisplayStepProps> = ({
@@ -18,9 +19,18 @@ export const DisplayStep: React.FC<DisplayStepProps> = ({
   onSelectDisplay,
   onGoToFirmware,
   stockMap,
+  onOutOfStockAttempt,
 }) => {
   const { t } = useTranslation();
   const isDisplayInStock = stockMap?.['display_oled'] !== false;
+
+  const handleSelectYes = () => {
+    if (!isDisplayInStock) {
+      onOutOfStockAttempt?.(t('products.displayOled', 'OLED Status Display Module'));
+      return;
+    }
+    onSelectDisplay('Yes');
+  };
 
   if (currentVersion === 'None') {
     return (
@@ -167,10 +177,12 @@ export const DisplayStep: React.FC<DisplayStepProps> = ({
           whileHover={{ y: -3, scale: 1.008 }}
           whileTap={{ scale: 0.985 }}
           transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-          onClick={() => onSelectDisplay('Yes')}
+          onClick={handleSelectYes}
           className={`rounded-xl sm:rounded-2xl transition-all duration-200 flex flex-col justify-between p-3 sm:p-5 cursor-pointer min-h-0 ${
             currentDisplay === 'Yes'
               ? 'bg-white border-2 border-emerald-500 shadow-md ring-2 sm:ring-4 ring-emerald-500/10'
+              : !isDisplayInStock
+              ? 'bg-white/70 border border-rose-200 shadow-xs hover:border-rose-300'
               : 'bg-white/90 border border-neutral-200/90 shadow-xs hover:border-neutral-300 hover:bg-white hover:shadow-sm'
           }`}
         >
@@ -241,8 +253,10 @@ export const DisplayStep: React.FC<DisplayStepProps> = ({
               <span className="text-[10px] sm:text-xs uppercase tracking-wider text-neutral-400 font-semibold">
                 {t('bill.price', 'Cost')}
               </span>
-              <span className="text-base sm:text-xl md:text-2xl font-mono font-black text-neutral-900">
-                ₹{PRICING_CATALOG.display.Yes}
+              <span className={`text-base sm:text-xl md:text-2xl font-mono font-black ${
+                isDisplayInStock ? 'text-neutral-900' : 'text-neutral-400 line-through'
+              }`}>
+                ₹{applyPsychologicalPricing(PRICING_CATALOG.display.Yes)}
               </span>
             </div>
 
@@ -253,15 +267,21 @@ export const DisplayStep: React.FC<DisplayStepProps> = ({
               whileTap={{ scale: 0.96 }}
               onClick={(e) => {
                 e.stopPropagation();
-                onSelectDisplay('Yes');
+                handleSelectYes();
               }}
-              className={`px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-mono text-xs sm:text-sm font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 currentDisplay === 'Yes'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-neutral-900 text-white hover:bg-neutral-800'
+                  ? 'px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-mono text-xs sm:text-sm font-bold uppercase tracking-wider bg-emerald-600 text-white shadow-xs'
+                  : !isDisplayInStock
+                  ? 'px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-lg text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/90 shadow-2xs'
+                  : 'px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-mono text-xs sm:text-sm font-bold uppercase tracking-wider bg-neutral-900 text-white hover:bg-neutral-800'
               }`}
             >
-              {currentDisplay === 'Yes' ? t('steps.display.yes.selected', 'Selected') : t('steps.display.yes.select', 'Yes')}
+              {currentDisplay === 'Yes'
+                ? t('steps.display.yes.selected', 'Selected')
+                : !isDisplayInStock
+                ? t('common.outOfStock', 'Out of Stock')
+                : t('steps.display.yes.select', 'Yes')}
             </motion.button>
           </div>
         </motion.div>

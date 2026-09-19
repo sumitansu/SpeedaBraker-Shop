@@ -3,7 +3,13 @@ import { ArrowLeft, ArrowRight, ChevronDown, Receipt } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { UpperBoxConfig, LowerSlotConfig, StepId, StepConfig, AntennaDbiType, AppliedPromo } from './types';
-import { calculateTotalPrice, PRICING_CATALOG, usePricingCatalog } from './utils/pricing';
+import {
+  calculateTotalPrice,
+  calculateRawTotalPrice,
+  applyPsychologicalPricing,
+  PRICING_CATALOG,
+  usePricingCatalog,
+} from './utils/pricing';
 import { useAnimatedPrice } from './hooks/useAnimatedPrice';
 import {
   extractBaseCustomerCode,
@@ -15,6 +21,7 @@ import {
   saveOrderToFirestore,
   verifyOrderInFirestore,
   ProductStockRecord,
+  subscribeProductStock,
 } from './lib/firebase';
 
 import { Header } from './components/Header';
@@ -33,6 +40,7 @@ import { AddAndConfigureAntennaModal } from './components/modals/AddAndConfigure
 import { CustomizeAntennaModal } from './components/modals/CustomizeAntennaModal';
 import { ImportModal } from './components/modals/ImportModal';
 import { AdminLoginModal } from './components/modals/AdminLoginModal';
+import { OutOfStockModal, OutOfStockModalData } from './components/modals/OutOfStockModal';
 
 import { FirmwareStep } from './components/steps/FirmwareStep';
 import { DisplayStep } from './components/steps/DisplayStep';
@@ -97,6 +105,11 @@ export default function App() {
   const [customizeSlotId, setCustomizeSlotId] = useState<number | null>(null);
   const [showBillCanvas, setShowBillCanvas] = useState<boolean>(false);
   const [showImportModal, setShowImportModal] = useState<boolean>(false);
+  const [outOfStockModalData, setOutOfStockModalData] = useState<OutOfStockModalData | null>(null);
+
+  const handleOutOfStockAttempt = (itemName: string) => {
+    setOutOfStockModalData({ itemName });
+  };
 
   // Active antenna count
   const activeAntennaCount = useMemo(() => {
@@ -500,6 +513,20 @@ export default function App() {
     }
 
     // Toggle display or wireless
+    if (targetBox.label.toLowerCase() === 'display' && targetBox.value !== 'Yes') {
+      if (stockMap['display_oled'] === false) {
+        handleOutOfStockAttempt('OLED Status Display Module');
+        return;
+      }
+    }
+
+    if (targetBox.label.toLowerCase() === 'wireless' && targetBox.value !== 'Yes') {
+      if (stockMap['wireless_5ghz'] === false) {
+        handleOutOfStockAttempt('5GHz High-Speed Wireless Control Module');
+        return;
+      }
+    }
+
     setUpperBoxes((prev) => {
       const updated = prev.map((box) => {
         if (box.id !== id) return box;
@@ -579,6 +606,12 @@ export default function App() {
   useEffect(() => {
     testFirebaseConnection();
     ensureAdminAccountSeeded();
+    const unsubscribeStock = subscribeProductStock((newStockMap) => {
+      setStockMap(newStockMap);
+    });
+    return () => {
+      unsubscribeStock();
+    };
   }, []);
 
   const handleAdminLoginSuccess = (username: string) => {
@@ -596,17 +629,11 @@ export default function App() {
 
   const handleApplyPromo = (promo: AppliedPromo) => {
     setAppliedPromo(promo);
-    setDbVerificationStatus({
-      checked: true,
-      verified: true,
-      message: 'Verified promo code with Firebase database',
-    });
     setCustomerCode((prev) => extractBaseCustomerCode(prev));
   };
 
   const handleRemovePromo = () => {
     setAppliedPromo(null);
-    setDbVerificationStatus(null);
     setCustomerCode((prev) => extractBaseCustomerCode(prev));
   };
 
@@ -614,23 +641,18 @@ export default function App() {
     return generateInvoiceNumber(upperBoxes, slots, antennaDbiTypes, customerCode);
   }, [upperBoxes, slots, antennaDbiTypes, customerCode]);
 
-  const handleDownloadInvoice = async () => {
-    const configuredSubtotal = calculateTotalPrice(upperBoxes, slots, antennaDbiTypes);
-    const grandTotal = configuredSubtotal + PRICING_CATALOG.mandatoryModules;
-    const { discountAmount, finalTotal } = calculateDiscount(grandTotal, appliedPromo);
-    const itemCode = generateBoughtItemCode(upperBoxes, slots, antennaDbiTypes);
+  const [placedInvoices, setPlacedInvoices] = useState<Set<string>>(new Set());
+  const [isPlacingOrder, setIsPlacingOrder] = useState<boolean>(false);
 
-    // Save order record to Firebase Firestore
-    await saveOrderToFirestore(
-      invoiceNumber,
-      itemCode,
-      customerCode,
-      grandTotal,
-      discountAmount,
-      finalTotal,
-      appliedPromo
+  const isCurrentInvoiceRegistered = useMemo(() => {
+    return (
+      placedInvoices.has(invoiceNumber) ||
+      (dbVerificationStatus?.checked === true && dbVerificationStatus?.verified === true)
     );
+  }, [placedInvoices, invoiceNumber, dbVerificationStatus]);
 
+  // Top download button: Downloads .sbs locally WITHOUT sending data to Firestore database
+  const handleDownloadInvoiceLocal = () => {
     const orderDetails = generateOrderDetailsJson(
       upperBoxes,
       slots,
@@ -640,6 +662,41 @@ export default function App() {
       appliedPromo
     );
     downloadSbsFile(invoiceNumber, orderDetails);
+  };
+
+  // Bottom action button: Places order, registers invoice and its details in Firebase Firestore
+  const handlePlaceOrder = async () => {
+    setIsPlacingOrder(true);
+    try {
+      const rawGrandTotal =
+        calculateRawTotalPrice(upperBoxes, slots, antennaDbiTypes) +
+        PRICING_CATALOG.mandatoryModules;
+      const grandTotal = applyPsychologicalPricing(rawGrandTotal);
+      const { discountAmount, finalTotal } = calculateDiscount(grandTotal, appliedPromo);
+      const itemCode = generateBoughtItemCode(upperBoxes, slots, antennaDbiTypes);
+
+      // Save order record to Firebase Firestore
+      await saveOrderToFirestore(
+        invoiceNumber,
+        itemCode,
+        customerCode,
+        grandTotal,
+        discountAmount,
+        finalTotal,
+        appliedPromo
+      );
+
+      setPlacedInvoices((prev) => new Set(prev).add(invoiceNumber));
+      setDbVerificationStatus({
+        checked: true,
+        verified: true,
+        message: 'Verified authentic database order',
+      });
+    } catch (err) {
+      console.error('Failed to register order in Firestore:', err);
+    } finally {
+      setIsPlacingOrder(false);
+    }
   };
 
   const handleConfirmReset = () => {
@@ -653,6 +710,7 @@ export default function App() {
     setCustomerCode(generateRandomCustomerCode());
     setAppliedPromo(null);
     setDbVerificationStatus(null);
+    setPlacedInvoices(new Set());
   };
 
   const applyImportedConfiguration = async (parsed: ParsedImportResult) => {
@@ -793,7 +851,7 @@ export default function App() {
   return (
     <div
       id="app-root"
-      className="h-screen w-screen flex flex-col bg-neutral-100 text-neutral-900 select-none overflow-hidden font-sans"
+      className="h-screen min-h-[100dvh] w-screen flex flex-col bg-neutral-100 text-neutral-900 select-none overflow-hidden font-sans"
     >
       {/* Header */}
       <Header
@@ -804,7 +862,7 @@ export default function App() {
           setShowAdminCanvas(false);
         }}
         onOpenAdminCanvas={() => setShowAdminCanvas(true)}
-        onDownloadInvoice={handleDownloadInvoice}
+        onDownloadInvoice={handleDownloadInvoiceLocal}
         invoiceNumber={invoiceNumber}
         onResetClick={() => setShowConfirmReset(true)}
         onImportClick={handleImportClick}
@@ -903,6 +961,8 @@ export default function App() {
             onClose={() => setUnconfiguredModalSlot(null)}
             onAddAsNormal={() => handleAddSlotQuality(unconfiguredModalSlot, 'Normal')}
             onAddAsPowerful={() => handleAddSlotQuality(unconfiguredModalSlot, 'Powerful')}
+            stockMap={stockMap}
+            onOutOfStockAttempt={handleOutOfStockAttempt}
           />
         )}
 
@@ -913,6 +973,8 @@ export default function App() {
             slotId={unconfiguredTypeModalData.slotId}
             initialTierId={unconfiguredTypeModalData.initialTierId}
             onClose={() => setUnconfiguredTypeModalData(null)}
+            stockMap={stockMap}
+            onOutOfStockAttempt={handleOutOfStockAttempt}
             onConfirm={(slotId, quality, dbi) => {
               setSlots((prev) =>
                 prev.map((slot) => (slot.id === slotId ? { ...slot, value: quality } : slot))
@@ -934,6 +996,8 @@ export default function App() {
             slotStatus={slots.find((s) => s.id === customizeSlotId)?.value || 'None'}
             currentDbi={antennaDbiTypes[customizeSlotId]}
             currentVersion={currentVersion}
+            stockMap={stockMap}
+            onOutOfStockAttempt={handleOutOfStockAttempt}
             onClose={() => setCustomizeSlotId(null)}
             onActivate={(slotId) => {
               setSlots((prev) =>
@@ -980,6 +1044,15 @@ export default function App() {
           />
         )}
 
+        {/* Out of Stock Alert Modal */}
+        {outOfStockModalData !== null && (
+          <OutOfStockModal
+            key="out-of-stock-modal"
+            data={outOfStockModalData}
+            onClose={() => setOutOfStockModalData(null)}
+          />
+        )}
+
         {/* Jump to Question Modal */}
         {showJumpModal && (
           <JumpQuestionModal
@@ -997,7 +1070,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* Main Canvas Area */}
-      <main id="main-canvas" className="flex-1 flex flex-col w-full h-[calc(100vh-3.5rem)] overflow-hidden">
+      <main id="main-canvas" className="flex-1 flex flex-col w-full min-h-0 overflow-hidden relative">
         {showAdminCanvas ? (
           <AdminCanvas
             currentAdminUser={currentAdminUser}
@@ -1013,14 +1086,17 @@ export default function App() {
             antennaDbiTypes={antennaDbiTypes}
             customerCode={customerCode}
             invoiceNumber={invoiceNumber}
-            onDownloadInvoice={handleDownloadInvoice}
+            onDownloadInvoice={handleDownloadInvoiceLocal}
+            onPlaceOrder={handlePlaceOrder}
+            isPlacingOrder={isPlacingOrder}
+            isRegistered={isCurrentInvoiceRegistered}
             appliedPromo={appliedPromo}
             onApplyPromo={handleApplyPromo}
             onRemovePromo={handleRemovePromo}
             dbVerificationStatus={dbVerificationStatus}
           />
         ) : (
-          <>
+          <div className="w-full max-w-7xl mx-auto flex-1 flex flex-col min-h-0 overflow-hidden">
             {/* Top 1/3 Canvas: Status Grid & Price Tag */}
             <TopStatusGrid
               upperBoxes={upperBoxes}
@@ -1033,18 +1109,18 @@ export default function App() {
               priceDirection={priceDirection}
             />
 
-        {/* Canvas Divider */}
-        <div id="canvas-divider" className="w-full h-px bg-neutral-200 shrink-0" />
+            {/* Canvas Divider */}
+            <div id="canvas-divider" className="w-full h-px bg-neutral-200/90 shrink-0" />
 
-        {/* Lower 2/3 Canvas: Question Navigation & Active Step Content */}
-        <section
-          id="lower-two-thirds-canvas"
-          className="flex-1 w-full bg-neutral-100/60 p-2 sm:p-3 lg:p-4 min-h-0 overflow-y-auto flex flex-col"
-        >
+            {/* Lower 2/3 Canvas: Question Navigation & Active Step Content */}
+            <section
+              id="lower-two-thirds-canvas"
+              className="flex-1 w-full bg-neutral-100/60 p-2 xs:p-2.5 sm:p-3 lg:p-4 min-h-0 overflow-y-auto flex flex-col"
+            >
           {/* Shared Fixed-Size Question Navigation Header */}
           <div
             id="question-nav-header"
-            className="h-11 sm:h-12 w-full px-2 sm:px-4 flex items-center justify-between border-b border-neutral-200/80 shrink-0 bg-white/90 rounded-xl mb-2 sm:mb-3 backdrop-blur-xs shadow-2xs gap-2"
+            className="h-11 sm:h-12 w-full px-2 sm:px-4 flex items-center justify-between border border-neutral-200/80 shrink-0 bg-white/95 rounded-xl sm:rounded-2xl mb-2 sm:mb-3 backdrop-blur-xs shadow-2xs gap-1.5 sm:gap-2"
           >
             {/* Left: Previous Question */}
             <div className="flex-1 flex justify-start min-w-0">
@@ -1055,11 +1131,11 @@ export default function App() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.96 }}
                   onClick={() => goToStep(previousStep.id)}
-                  className="h-8 sm:h-8.5 flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 text-xs sm:text-sm font-semibold text-neutral-800 hover:text-neutral-900 bg-white hover:bg-neutral-50 active:bg-neutral-100 rounded-lg border border-neutral-300 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+                  className="h-8 sm:h-8.5 flex items-center gap-1 sm:gap-1.5 px-2 xs:px-2.5 sm:px-3 text-xs sm:text-sm font-semibold text-neutral-800 hover:text-neutral-900 bg-white hover:bg-neutral-50 active:bg-neutral-100 rounded-lg sm:rounded-xl border border-neutral-300 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
                 >
                   <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-neutral-600 shrink-0" />
-                  <span className="hidden sm:inline truncate max-w-[120px]">{previousStep.name}</span>
-                  <span className="sm:hidden">Back</span>
+                  <span className="hidden xs:inline truncate max-w-[80px] sm:max-w-[120px]">{previousStep.name}</span>
+                  <span className="xs:hidden">Back</span>
                 </motion.button>
               ) : null}
             </div>
@@ -1073,9 +1149,9 @@ export default function App() {
                 whileTap={{ scale: 0.96 }}
                 onClick={() => setShowJumpModal(true)}
                 title="Click to jump to any question"
-                className="h-8 sm:h-8.5 group flex items-center gap-1.5 px-3 sm:px-4 rounded-full bg-neutral-900 hover:bg-black text-white shadow-2xs transition-all cursor-pointer whitespace-nowrap"
+                className="h-8 sm:h-8.5 group flex items-center gap-1 sm:gap-1.5 px-2.5 xs:px-3 sm:px-4 rounded-full bg-neutral-900 hover:bg-black text-white shadow-2xs transition-all cursor-pointer whitespace-nowrap"
               >
-                <span className="text-xs sm:text-sm font-black font-mono tracking-tight whitespace-nowrap">
+                <span className="text-[11px] xs:text-xs sm:text-sm font-black font-mono tracking-tight whitespace-nowrap truncate max-w-[120px] xs:max-w-[160px] sm:max-w-none">
                   {currentStepConfig.name}
                 </span>
                 <ChevronDown className="w-3.5 h-3.5 text-neutral-400 group-hover:text-white transition-colors shrink-0" />
@@ -1096,14 +1172,14 @@ export default function App() {
                     goToStep(nextStep.id);
                   }}
                   title={nextButtonTitle}
-                  className={`h-8 sm:h-8.5 flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 text-xs sm:text-sm font-semibold rounded-lg shadow-xs transition-all whitespace-nowrap ${
+                  className={`h-8 sm:h-8.5 flex items-center gap-1 sm:gap-1.5 px-2 xs:px-2.5 sm:px-3 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl shadow-xs transition-all whitespace-nowrap ${
                     isNextDisabled
                       ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed opacity-70'
                       : 'bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800 cursor-pointer'
                   }`}
                 >
-                  <span className="hidden sm:inline truncate max-w-[120px]">{nextStep.name}</span>
-                  <span className="sm:hidden">Next</span>
+                  <span className="hidden xs:inline truncate max-w-[80px] sm:max-w-[120px]">{nextStep.name}</span>
+                  <span className="xs:hidden">Next</span>
                   <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                 </motion.button>
               ) : (
@@ -1118,7 +1194,7 @@ export default function App() {
                     setShowBillCanvas(true);
                   }}
                   title={isNextDisabled ? nextButtonTitle : 'Open Bill & Invoice'}
-                  className={`h-8 sm:h-8.5 flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 text-xs sm:text-sm font-bold rounded-lg shadow-xs transition-all whitespace-nowrap ${
+                  className={`h-8 sm:h-8.5 flex items-center gap-1 sm:gap-1.5 px-2.5 xs:px-3 sm:px-4 text-xs sm:text-sm font-bold rounded-lg sm:rounded-xl shadow-xs transition-all whitespace-nowrap ${
                     isNextDisabled
                       ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed opacity-70'
                       : 'bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800 cursor-pointer shadow-sm hover:scale-[1.02]'
@@ -1176,6 +1252,7 @@ export default function App() {
                     onSelectDisplay={handleSelectDisplay}
                     onGoToFirmware={() => goToStep('firmware')}
                     stockMap={stockMap}
+                    onOutOfStockAttempt={handleOutOfStockAttempt}
                   />
                 )}
 
@@ -1187,6 +1264,7 @@ export default function App() {
                     onOpenWirelessWarning={() => setShowWirelessWarningModal(true)}
                     onGoToFirmware={() => goToStep('firmware')}
                     stockMap={stockMap}
+                    onOutOfStockAttempt={handleOutOfStockAttempt}
                   />
                 )}
 
@@ -1210,6 +1288,7 @@ export default function App() {
                     onGoToFirmware={() => goToStep('firmware')}
                     onGoToAntennas={() => goToStep('antennas')}
                     stockMap={stockMap}
+                    onOutOfStockAttempt={handleOutOfStockAttempt}
                   />
                 )}
 
@@ -1229,15 +1308,16 @@ export default function App() {
                     onGoToFirmware={() => goToStep('firmware')}
                     onGoToAntennas={() => goToStep('antennas')}
                     stockMap={stockMap}
+                    onOutOfStockAttempt={handleOutOfStockAttempt}
                   />
                 )}
               </motion.div>
             </AnimatePresence>
           </div>
-        </section>
-      </>
-    )}
-  </main>
+            </section>
+          </div>
+        )}
+      </main>
     </div>
   );
 }

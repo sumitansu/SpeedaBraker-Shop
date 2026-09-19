@@ -1,1 +1,67 @@
 @import "tailwindcss";
+
+/* ==========================================================================
+   SVG Vector Path & Stroke Micro-Interactions
+   Animates internal SVG paths, lines, and strokes instead of moving icon containers
+   ========================================================================== */
+
+/* Base SVG icon properties: clean vector rendering, no container wobble */
+svg.lucide,
+svg[class*="lucide"],
+.lucide {
+  display: inline-block;
+  vertical-align: middle;
+  shape-rendering: geometricPrecision;
+}
+
+/* Ensure crisp vector linecaps and joints for all SVG path geometries */
+svg.lucide path,
+svg.lucide line,
+svg.lucide polyline,
+svg.lucide circle,
+svg.lucide rect,
+svg.lucide polygon,
+svg[class*="lucide"] path,
+svg[class*="lucide"] line,
+svg[class*="lucide"] polyline,
+svg[class*="lucide"] circle,
+svg[class*="lucide"] rect,
+svg[class*="lucide"] polygon {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* --------------------------------------------------------------------------
+   Confirmation Badge Mount Drawing Animation
+   Draws checkmark and confirmation strokes into view on initial render
+   -------------------------------------------------------------------------- */
+@keyframes svgCheckDraw {
+  0% {
+    stroke-dasharray: 24;
+    stroke-dashoffset: 24;
+    opacity: 0.2;
+  }
+  100% {
+    stroke-dasharray: 24;
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+svg.lucide-check path,
+svg.lucide-shield-check path {
+  animation: svgCheckDraw 0.65s cubic-bezier(0.16, 1, 0.3, 1) 1;
+}
+
+/* Respect user accessibility preferences */
+@media (prefers-reduced-motion: reduce) {
+  svg.lucide path,
+  svg.lucide line,
+  svg.lucide polyline,
+  svg.lucide circle,
+  svg.lucide rect,
+  svg.lucide polygon {
+    animation: none !important;
+    transition: opacity 0.15s ease !important;
+  }
+}

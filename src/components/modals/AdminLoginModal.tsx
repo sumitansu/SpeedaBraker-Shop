@@ -11,7 +11,6 @@ import {
   Loader2,
   LogOut,
   ShieldAlert,
-  Terminal,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from 'react-i18next';
@@ -30,13 +29,6 @@ interface AdminLoginModalProps {
   onLogout: () => void;
 }
 
-const TERMINAL_TYPING_MESSAGES = [
-  'Initializing encrypted authentication gateway...',
-  'Security check: Firestore admin privileges required.',
-  'Enter administrator credentials to proceed...',
-  'All access attempts are logged and monitored.',
-];
-
 export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
   isOpen,
   onClose,
@@ -54,53 +46,13 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
   const [justLoggedIn, setJustLoggedIn] = useState(false);
   const [lockoutCountdown, setLockoutCountdown] = useState<number>(0);
 
-  // Typewriter Terminal Animation State
-  const [typedText, setTypedText] = useState('');
-  const [msgIndex, setMsgIndex] = useState(0);
-  const [isDeleting, setIsDeleting] = useState(false);
-
   const accountInputRef = useRef<HTMLInputElement>(null);
-
-  // Typewriter effect loop when modal is open and user is not yet logged in
-  useEffect(() => {
-    if (!isOpen || isLoggedIn || justLoggedIn) return;
-
-    let timer: ReturnType<typeof setTimeout>;
-    const currentFullText = TERMINAL_TYPING_MESSAGES[msgIndex % TERMINAL_TYPING_MESSAGES.length];
-
-    if (!isDeleting) {
-      if (typedText.length < currentFullText.length) {
-        timer = setTimeout(() => {
-          setTypedText(currentFullText.slice(0, typedText.length + 1));
-        }, 35);
-      } else {
-        // Pause at end of sentence before deleting
-        timer = setTimeout(() => {
-          setIsDeleting(true);
-        }, 2200);
-      }
-    } else {
-      if (typedText.length > 0) {
-        timer = setTimeout(() => {
-          setTypedText(currentFullText.slice(0, typedText.length - 1));
-        }, 18);
-      } else {
-        setIsDeleting(false);
-        setMsgIndex((prev) => (prev + 1) % TERMINAL_TYPING_MESSAGES.length);
-      }
-    }
-
-    return () => clearTimeout(timer);
-  }, [isOpen, isLoggedIn, justLoggedIn, typedText, isDeleting, msgIndex]);
 
   // Focus input and check initial lockout on open
   useEffect(() => {
     if (isOpen) {
       setErrorMsg(null);
       setJustLoggedIn(false);
-      setTypedText('');
-      setIsDeleting(false);
-      setMsgIndex(0);
 
       const status = checkLockoutStatus();
       if (status.isLocked) {
@@ -188,8 +140,8 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-neutral-900/60 backdrop-blur-xs"
+          transition={{ duration: 0.18 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-neutral-900/50 backdrop-blur-xs"
           onClick={(e) => {
             if (e.target === e.currentTarget && !isLoading) {
               onClose();
@@ -198,23 +150,27 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
         >
           <motion.div
             id="admin-login-modal-card"
-            initial={{ scale: 0.94, opacity: 0, y: 10 }}
+            initial={{ scale: 0.94, opacity: 0, y: 12 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.94, opacity: 0, y: 10 }}
+            exit={{ scale: 0.94, opacity: 0, y: 12 }}
             transition={{ type: 'spring', stiffness: 450, damping: 30 }}
             style={{ willChange: 'transform, opacity' }}
             className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-neutral-200 overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-100 bg-neutral-50/80">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-neutral-900 flex items-center justify-center text-white shadow-2xs">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-100 bg-neutral-50/70">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-neutral-900 flex items-center justify-center text-white shadow-2xs">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
                 </div>
                 <div>
-                  <h2 className="text-base font-semibold text-neutral-900">{t('modals.adminLogin.title', 'Admin Authentication')}</h2>
-                  <p className="text-xs text-neutral-500">{t('modals.adminLogin.subtitle', 'Secure Firestore access gateway')}</p>
+                  <h2 className="text-base font-bold text-neutral-900 tracking-tight">
+                    {t('modals.adminLogin.title', 'Admin Portal')}
+                  </h2>
+                  <p className="text-xs text-neutral-500">
+                    {t('modals.adminLogin.subtitle', 'Authentication & store management')}
+                  </p>
                 </div>
               </div>
               <motion.button
@@ -232,23 +188,6 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
 
             {/* Modal Body */}
             <div className="p-5 space-y-4">
-              {/* Typewriter Terminal Animation Bar (Active when not logged in) */}
-              {!isLoggedIn && !justLoggedIn && (
-                <motion.div
-                  id="admin-typing-terminal-banner"
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="px-3.5 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-emerald-400 font-mono text-xs shadow-inner flex items-center gap-2 min-h-[36px]"
-                >
-                  <Terminal className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  <span className="text-emerald-500 font-bold select-none">&gt;</span>
-                  <div className="flex-1 truncate tracking-tight text-[11px] sm:text-xs">
-                    <span>{typedText}</span>
-                    <span className="inline-block w-1.5 h-3 bg-emerald-400 ml-0.5 animate-pulse align-middle" />
-                  </div>
-                </motion.div>
-              )}
-
               {/* Active Logged-in or Just-Logged-in View: Shows Green Checkmark */}
               {isLoggedIn || justLoggedIn ? (
                 <motion.div
@@ -277,10 +216,14 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                       {t('modals.adminLogin.authenticatedAdmin', 'Authenticated Admin')}
                     </span>
                     <h3 className="text-lg font-bold text-neutral-900">
-                      {t('modals.adminLogin.loggedInAs', 'Logged in as')} <span className="text-emerald-700">{currentAdminUser || account || 'Admin'}</span>
+                      {t('modals.adminLogin.loggedInAs', 'Logged in as')}{' '}
+                      <span className="text-emerald-700">{currentAdminUser || account || 'Admin'}</span>
                     </h3>
                     <p className="text-xs text-neutral-500 max-w-xs mx-auto">
-                      {t('modals.adminLogin.verifiedFirestore', 'Administrator credentials verified against Firebase Firestore database.')}
+                      {t(
+                        'modals.adminLogin.verifiedFirestore',
+                        'Administrator credentials verified against Firebase Firestore database.'
+                      )}
                     </p>
                   </div>
 
@@ -315,9 +258,10 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                   {errorMsg && (
                     <motion.div
                       id="admin-login-error"
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700"
+                      initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ duration: 0.15 }}
+                      className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700"
                     >
                       <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
                       <div className="flex-1 font-medium">{errorMsg}</div>
@@ -329,11 +273,12 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                       id="admin-login-lockout-banner"
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-800 font-medium"
+                      className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-800 font-medium"
                     >
                       <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
                       <div>
-                        {t('modals.adminLogin.rateLimit', 'Rate Limit Lock: Try again in')} <span className="font-bold text-amber-900">{lockoutCountdown}s</span>
+                        {t('modals.adminLogin.rateLimit', 'Rate Limit Lock: Try again in')}{' '}
+                        <span className="font-bold text-amber-900">{lockoutCountdown}s</span>
                       </div>
                     </motion.div>
                   )}
@@ -346,8 +291,8 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                     >
                       {t('modals.adminLogin.account', 'Account / Username')}
                     </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400">
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400 group-focus-within:text-neutral-900 transition-colors">
                         <User className="w-4 h-4" />
                       </div>
                       <input
@@ -366,12 +311,12 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                         data-form-type="other"
                         disabled={isLoading || lockoutCountdown > 0}
                         maxLength={32}
-                        className="w-full pl-9 pr-3 py-2 text-sm bg-neutral-50/50 hover:bg-neutral-50 focus:bg-white border border-neutral-300 rounded-lg text-neutral-900 placeholder-neutral-400 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                        className="w-full pl-9 pr-3 py-2 text-sm bg-neutral-50/70 hover:bg-neutral-50 focus:bg-white border border-neutral-300 rounded-xl text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900/15 focus:border-neutral-900 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                       />
                     </div>
                   </div>
 
-                  {/* Password Field */}
+                  {/* Password Field with Smooth Show/Hide Transition */}
                   <div className="space-y-1.5">
                     <label
                       htmlFor="admin-password-input"
@@ -379,8 +324,8 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                     >
                       {t('modals.adminLogin.password', 'Password')}
                     </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400">
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400 group-focus-within:text-neutral-900 transition-colors">
                         <Lock className="w-4 h-4" />
                       </div>
                       <input
@@ -398,17 +343,45 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                         data-form-type="other"
                         disabled={isLoading || lockoutCountdown > 0}
                         maxLength={128}
-                        className="w-full pl-9 pr-10 py-2 text-sm bg-neutral-50/50 hover:bg-neutral-50 focus:bg-white border border-neutral-300 rounded-lg text-neutral-900 placeholder-neutral-400 focus:outline-hidden focus:ring-2 focus:ring-neutral-900 focus:border-transparent transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                        className="w-full pl-9 pr-10 py-2 text-sm bg-neutral-50/70 hover:bg-neutral-50 focus:bg-white border border-neutral-300 rounded-xl text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900/15 focus:border-neutral-900 transition-all disabled:opacity-60 disabled:cursor-not-allowed font-sans"
                       />
-                      <button
+                      {/* Smooth Password Eye Toggle with rotation & scale morph */}
+                      <motion.button
                         id="btn-toggle-admin-password"
                         type="button"
-                        onClick={() => setShowPassword(!showPassword)}
+                        whileHover={{ scale: 1.12 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => setShowPassword((prev) => !prev)}
                         tabIndex={-1}
-                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-neutral-400 hover:text-neutral-600 cursor-pointer"
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-neutral-400 hover:text-neutral-800 transition-colors cursor-pointer"
+                        title={showPassword ? 'Hide password' : 'Show password'}
                       >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
+                        <AnimatePresence mode="wait" initial={false}>
+                          {showPassword ? (
+                            <motion.span
+                              key="eye-off"
+                              initial={{ opacity: 0, rotate: -35, scale: 0.7 }}
+                              animate={{ opacity: 1, rotate: 0, scale: 1 }}
+                              exit={{ opacity: 0, rotate: 35, scale: 0.7 }}
+                              transition={{ duration: 0.15, ease: 'easeOut' }}
+                              className="inline-flex items-center justify-center"
+                            >
+                              <EyeOff className="w-4 h-4 text-neutral-800" />
+                            </motion.span>
+                          ) : (
+                            <motion.span
+                              key="eye-on"
+                              initial={{ opacity: 0, rotate: 35, scale: 0.7 }}
+                              animate={{ opacity: 1, rotate: 0, scale: 1 }}
+                              exit={{ opacity: 0, rotate: -35, scale: 0.7 }}
+                              transition={{ duration: 0.15, ease: 'easeOut' }}
+                              className="inline-flex items-center justify-center"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </motion.span>
+                          )}
+                        </AnimatePresence>
+                      </motion.button>
                     </div>
                   </div>
 
@@ -416,10 +389,18 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                   <motion.button
                     id="btn-submit-admin-login"
                     type="submit"
-                    whileHover={!isLoading && lockoutCountdown === 0 && account.trim() && password ? { scale: 1.02 } : undefined}
-                    whileTap={!isLoading && lockoutCountdown === 0 && account.trim() && password ? { scale: 0.98 } : undefined}
+                    whileHover={
+                      !isLoading && lockoutCountdown === 0 && account.trim() && password
+                        ? { scale: 1.02 }
+                        : undefined
+                    }
+                    whileTap={
+                      !isLoading && lockoutCountdown === 0 && account.trim() && password
+                        ? { scale: 0.98 }
+                        : undefined
+                    }
                     disabled={isLoading || lockoutCountdown > 0 || !account.trim() || !password}
-                    className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 px-4 bg-neutral-900 hover:bg-neutral-800 active:bg-black text-white text-sm font-semibold rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
+                    className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 px-4 bg-neutral-900 hover:bg-black active:bg-neutral-950 text-white text-sm font-semibold rounded-xl transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                   >
                     {isLoading ? (
                       <>
@@ -442,5 +423,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
     </AnimatePresence>
   );
 };
+
+
 
 

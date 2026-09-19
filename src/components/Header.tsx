@@ -156,158 +156,161 @@ export const Header: React.FC<HeaderProps> = React.memo(({
   return (
     <header
       id="app-header"
-      className="h-14 px-3 sm:px-6 bg-white border-b border-neutral-200 flex items-center justify-between shadow-xs z-30 shrink-0 print:hidden select-none"
+      className="h-14 sm:h-15 w-full bg-white/95 backdrop-blur-md border-b border-neutral-200/90 flex items-center shadow-2xs z-30 shrink-0 print:hidden select-none"
     >
-      <div id="header-brand" className="flex items-center space-x-2 min-w-0">
-        <motion.h1
-          whileHover={{ scale: 1.01 }}
-          className="text-base sm:text-xl font-black tracking-tight text-neutral-900 truncate font-mono cursor-default"
-        >
-          {t('app.title', "Speedabraker's Shop")}
-        </motion.h1>
-        {showBillCanvas && (
-          <motion.span
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="hidden xs:inline text-xs font-semibold text-neutral-700 bg-neutral-100 px-2 py-0.5 rounded-md border border-neutral-200"
+      <div className="w-full max-w-7xl mx-auto px-2.5 sm:px-4 md:px-6 flex items-center justify-between min-w-0">
+        <div id="header-brand" className="flex items-center space-x-1.5 sm:space-x-2 min-w-0 mr-2">
+          <motion.h1
+            whileHover={{ scale: 1.01 }}
+            className="text-sm xs:text-base sm:text-lg md:text-xl font-black tracking-tight text-neutral-900 truncate font-mono cursor-default"
           >
-            {t('header.viewBill', 'Invoice')}
-          </motion.span>
-        )}
-        {showAdminCanvas && (
-          <motion.span
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="hidden xs:inline text-xs font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200"
-          >
-            {t('header.adminPortal', 'Admin Panel')}
-          </motion.span>
-        )}
-      </div>
+            {t('app.title', "Speedabraker's Shop")}
+          </motion.h1>
+          {showBillCanvas && (
+            <motion.span
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="hidden sm:inline-flex text-[11px] sm:text-xs font-semibold text-neutral-700 bg-neutral-100 px-2 py-0.5 rounded-md border border-neutral-200 shrink-0"
+            >
+              {t('header.viewBill', 'Invoice')}
+            </motion.span>
+          )}
+          {showAdminCanvas && (
+            <motion.span
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="hidden sm:inline-flex text-[11px] sm:text-xs font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 shrink-0"
+            >
+              {t('header.adminPortal', 'Admin Panel')}
+            </motion.span>
+          )}
+        </div>
 
-      <div id="header-actions-container" className="relative flex items-center gap-1.5 sm:gap-2 shrink-0">
-        {showAdminCanvas ? (
-          <motion.button
-            id="btn-header-back-config-from-admin"
-            type="button"
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.96 }}
-            onClick={onBackToConfig}
-            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300 rounded-lg transition-colors border border-neutral-300 cursor-pointer whitespace-nowrap shadow-2xs"
-            title={t('bill.backToConfig', 'Back to Configuration')}
-          >
-            <ArrowLeft className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
-            <span className="hidden sm:inline">{t('bill.backToConfig', 'Back to Config')}</span>
-            <span className="sm:hidden">{t('steps.previous', 'Back')}</span>
-          </motion.button>
-        ) : showBillCanvas ? (
-          <>
+        <div id="header-actions-container" className="relative flex items-center gap-1 xs:gap-1.5 sm:gap-2 shrink-0">
+          {showAdminCanvas ? (
             <motion.button
-              id="btn-header-back-config"
+              id="btn-header-back-config-from-admin"
               type="button"
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.96 }}
               onClick={onBackToConfig}
-              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300 rounded-lg transition-colors border border-neutral-300 cursor-pointer whitespace-nowrap"
+              className="flex items-center gap-1 sm:gap-1.5 px-2 xs:px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300 rounded-lg sm:rounded-xl transition-colors border border-neutral-300 cursor-pointer whitespace-nowrap shadow-2xs"
               title={t('bill.backToConfig', 'Back to Configuration')}
             >
               <ArrowLeft className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
               <span className="hidden sm:inline">{t('bill.backToConfig', 'Back to Config')}</span>
               <span className="sm:hidden">{t('steps.previous', 'Back')}</span>
             </motion.button>
+          ) : showBillCanvas ? (
+            <>
+              <motion.button
+                id="btn-header-back-config"
+                type="button"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
+                onClick={onBackToConfig}
+                className="flex items-center gap-1 sm:gap-1.5 px-2 xs:px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300 rounded-lg sm:rounded-xl transition-colors border border-neutral-300 cursor-pointer whitespace-nowrap shadow-2xs"
+                title={t('bill.backToConfig', 'Back to Configuration')}
+              >
+                <ArrowLeft className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
+                <span className="hidden sm:inline">{t('bill.backToConfig', 'Back to Config')}</span>
+                <span className="sm:hidden">{t('steps.previous', 'Back')}</span>
+              </motion.button>
 
-            <motion.button
-              id="btn-header-download-invoice"
-              type="button"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-              onPointerDown={handlePointerDown}
-              onPointerUp={handlePointerUp}
-              onPointerLeave={handlePointerCancel}
-              onPointerCancel={handlePointerCancel}
-              onClick={handleClick}
-              className={`relative flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg shadow-2xs transition-all cursor-pointer whitespace-nowrap select-none ${
-                copied
-                  ? 'bg-emerald-600 text-white hover:bg-emerald-700 ring-2 ring-emerald-500/40'
-                  : isPressing
-                  ? 'bg-neutral-800 text-neutral-200 scale-98 ring-2 ring-neutral-400/50'
-                  : 'bg-neutral-900 hover:bg-black text-white'
-              }`}
-              title={t('topGrid.copyCode', 'Click to download .sbs invoice, hold to copy Invoice ID')}
-            >
-              {copied ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-white shrink-0" />
-                  <span>{t('topGrid.copied', 'Invoice ID Copied!')}</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-3.5 h-3.5 shrink-0" />
-                  <span>{t('bill.exportSBS', 'Download Invoice')}</span>
-                </>
-              )}
-            </motion.button>
-          </>
-        ) : (
-          <motion.button
-            id="btn-reset"
-            type="button"
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.96 }}
-            onPointerDown={handleResetPointerDown}
-            onPointerUp={handleResetPointerUp}
-            onPointerLeave={handleResetPointerCancel}
-            onPointerCancel={handleResetPointerCancel}
-            onClick={handleResetClick}
-            className={`relative flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition-all border border-neutral-300 cursor-pointer whitespace-nowrap shadow-2xs select-none ${
-              isResetPressing
-                ? 'bg-neutral-200 text-neutral-900 ring-2 ring-neutral-400/40 scale-98'
-                : 'text-neutral-700 bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300'
-            }`}
-            title={t('header.resetTooltip', 'Click to reset, hold to import configuration')}
-          >
-            <RotateCcw
-              className={`w-3.5 h-3.5 text-neutral-600 shrink-0 transition-transform duration-200 ${
-                isResetPressing ? '-rotate-90 text-neutral-900' : ''
-              }`}
-            />
-            <span>{t('header.reset', 'Reset')}</span>
-          </motion.button>
-        )}
-
-        {!showBillCanvas && (
-          isLoggedIn ? (
-            <motion.button
-              id="btn-login"
-              type="button"
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.96 }}
-              onClick={onOpenAdminCanvas || onLoginClick}
-              className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition-colors border cursor-pointer whitespace-nowrap shadow-2xs ${
-                showAdminCanvas
-                  ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700'
-                  : 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 border-emerald-300 hover:border-emerald-400'
-              }`}
-              title={`Admin: ${currentAdminUser || 'Admin'}`}
-            >
-              <Check className={`w-3.5 h-3.5 stroke-[2.5] shrink-0 ${showAdminCanvas ? 'text-white' : 'text-emerald-600'}`} />
-              <span className="truncate max-w-[80px] sm:max-w-[120px]">{currentAdminUser || t('header.adminPortal', 'Admin')}</span>
-            </motion.button>
+              <motion.button
+                id="btn-header-download-invoice"
+                type="button"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.97 }}
+                onPointerDown={handlePointerDown}
+                onPointerUp={handlePointerUp}
+                onPointerLeave={handlePointerCancel}
+                onPointerCancel={handlePointerCancel}
+                onClick={handleClick}
+                className={`relative flex items-center gap-1 sm:gap-1.5 px-2.5 xs:px-3 sm:px-3.5 py-1.5 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl shadow-2xs transition-all cursor-pointer whitespace-nowrap select-none ${
+                  copied
+                    ? 'bg-emerald-600 text-white hover:bg-emerald-700 ring-2 ring-emerald-500/40'
+                    : isPressing
+                    ? 'bg-neutral-800 text-neutral-200 scale-98 ring-2 ring-neutral-400/50'
+                    : 'bg-neutral-900 hover:bg-black text-white'
+                }`}
+                title={t('topGrid.copyCode', 'Click to download .sbs invoice, hold to copy Invoice ID')}
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-white shrink-0" />
+                    <span className="text-[11px] sm:text-xs">{t('topGrid.copied', 'Copied!')}</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5 shrink-0" />
+                    <span className="hidden xs:inline">{t('bill.exportSBS', 'Download Invoice')}</span>
+                    <span className="xs:hidden">{t('bill.export', 'Invoice')}</span>
+                  </>
+                )}
+              </motion.button>
+            </>
           ) : (
             <motion.button
-              id="btn-login"
+              id="btn-reset"
               type="button"
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.96 }}
-              onClick={onLoginClick}
-              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-800 hover:text-neutral-900 bg-white hover:bg-neutral-50 active:bg-neutral-100 rounded-lg transition-colors border border-neutral-300 hover:border-neutral-400 cursor-pointer whitespace-nowrap shadow-2xs"
-              title={t('header.adminLogin', 'Admin Login')}
+              onPointerDown={handleResetPointerDown}
+              onPointerUp={handleResetPointerUp}
+              onPointerLeave={handleResetPointerCancel}
+              onPointerCancel={handleResetPointerCancel}
+              onClick={handleResetClick}
+              className={`relative flex items-center gap-1 sm:gap-1.5 px-2 xs:px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg sm:rounded-xl transition-all border border-neutral-300 cursor-pointer whitespace-nowrap shadow-2xs select-none ${
+                isResetPressing
+                  ? 'bg-neutral-200 text-neutral-900 ring-2 ring-neutral-400/40 scale-98'
+                  : 'text-neutral-700 bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300'
+              }`}
+              title={t('header.resetTooltip', 'Click to reset, hold to import configuration')}
             >
-              <LogIn className="w-3.5 h-3.5 text-neutral-700 shrink-0" />
-              <span>{t('header.adminLogin', 'Login')}</span>
+              <RotateCcw
+                className={`w-3.5 h-3.5 text-neutral-600 shrink-0 transition-transform duration-200 ${
+                  isResetPressing ? '-rotate-90 text-neutral-900' : ''
+                }`}
+              />
+              <span>{t('header.reset', 'Reset')}</span>
             </motion.button>
-          )
-        )}
+          )}
+
+          {!showBillCanvas && (
+            isLoggedIn ? (
+              <motion.button
+                id="btn-login"
+                type="button"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
+                onClick={onOpenAdminCanvas || onLoginClick}
+                className={`flex items-center gap-1 sm:gap-1.5 px-2 xs:px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl transition-colors border cursor-pointer whitespace-nowrap shadow-2xs ${
+                  showAdminCanvas
+                    ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700'
+                    : 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 border-emerald-300 hover:border-emerald-400'
+                }`}
+                title={`Admin: ${currentAdminUser || 'Admin'}`}
+              >
+                <Check className={`w-3.5 h-3.5 stroke-[2.5] shrink-0 ${showAdminCanvas ? 'text-white' : 'text-emerald-600'}`} />
+                <span className="truncate max-w-[70px] xs:max-w-[90px] sm:max-w-[120px]">{currentAdminUser || t('header.adminPortal', 'Admin')}</span>
+              </motion.button>
+            ) : (
+              <motion.button
+                id="btn-login"
+                type="button"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
+                onClick={onLoginClick}
+                className="flex items-center gap-1 sm:gap-1.5 px-2 xs:px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium text-neutral-800 hover:text-neutral-900 bg-white hover:bg-neutral-50 active:bg-neutral-100 rounded-lg sm:rounded-xl transition-colors border border-neutral-300 hover:border-neutral-400 cursor-pointer whitespace-nowrap shadow-2xs"
+                title={t('header.adminLogin', 'Admin Login')}
+              >
+                <LogIn className="w-3.5 h-3.5 text-neutral-700 shrink-0" />
+                <span>{t('header.adminLogin', 'Login')}</span>
+              </motion.button>
+            )
+          )}
+        </div>
       </div>
     </header>
   );

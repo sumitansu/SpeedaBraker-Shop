@@ -2,7 +2,7 @@ import React from 'react';
 import { Info, Check } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import { PRICING_CATALOG } from '../../utils/pricing';
+import { PRICING_CATALOG, applyPsychologicalPricing } from '../../utils/pricing';
 
 interface FirmwareStepProps {
   currentVersion: string;
@@ -151,7 +151,7 @@ export const FirmwareStep: React.FC<FirmwareStepProps> = ({
                 {t('steps.firmware.v1.priceLabel', 'Firmware Price')}
               </span>
               <span className="font-mono font-black text-neutral-900 text-[clamp(1.15rem,1.8vw,1.6rem)] sm:text-xl md:text-2xl">
-                ₹{PRICING_CATALOG.version.V1}
+                ₹{applyPsychologicalPricing(PRICING_CATALOG.version.V1)}
               </span>
             </div>
 
@@ -285,7 +285,7 @@ export const FirmwareStep: React.FC<FirmwareStepProps> = ({
                 {t('steps.firmware.v2.priceLabel', 'Firmware Price')}
               </span>
               <span className="font-mono font-black text-neutral-900 text-[clamp(1.15rem,1.8vw,1.6rem)] sm:text-xl md:text-2xl">
-                ₹{PRICING_CATALOG.version.V2}
+                ₹{applyPsychologicalPricing(PRICING_CATALOG.version.V2)}
               </span>
             </div>
 

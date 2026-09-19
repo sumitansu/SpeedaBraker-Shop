@@ -3,7 +3,7 @@ import { AlertCircle, Radio, Zap, Plus, Check, Signal, Waves } from 'lucide-reac
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import { LowerSlotConfig, AntennaDbiType } from '../../types';
-import { PRICING_CATALOG } from '../../utils/pricing';
+import { PRICING_CATALOG, applyPsychologicalPricing } from '../../utils/pricing';
 
 interface AntennaTypeStepProps {
   currentVersion: string;
@@ -14,6 +14,7 @@ interface AntennaTypeStepProps {
   onGoToFirmware: () => void;
   onGoToAntennas?: () => void;
   stockMap?: Record<string, boolean>;
+  onOutOfStockAttempt?: (itemName: string) => void;
 }
 
 interface DbiTierConfig {
@@ -36,6 +37,7 @@ export const AntennaTypeStep: React.FC<AntennaTypeStepProps> = ({
   onGoToFirmware,
   onGoToAntennas,
   stockMap,
+  onOutOfStockAttempt,
 }) => {
   const { t } = useTranslation();
   const is0dbiInStock = stockMap?.['antenna_dbi_0'] !== false;
@@ -46,6 +48,19 @@ export const AntennaTypeStep: React.FC<AntennaTypeStepProps> = ({
     if (id === '0dbi') return is0dbiInStock;
     if (id === '6dbi') return is6dbiInStock;
     return is12dbiInStock;
+  };
+
+  const handleSelectType = (slotId: number, dbiType: AntennaDbiType) => {
+    if (!isDbiInStock(dbiType)) {
+      const dbiNames: Record<AntennaDbiType, string> = {
+        '0dbi': t('products.antenna0dbi', '0 dBi Stubby Antenna'),
+        '6dbi': t('products.antenna6dbi', '6 dBi High-Gain Antenna'),
+        '12dbi': t('products.antenna12dbi', '12 dBi Long-Range Antenna'),
+      };
+      onOutOfStockAttempt?.(dbiNames[dbiType] || `${dbiType} Antenna`);
+      return;
+    }
+    onSelectAntennaType(slotId, dbiType);
   };
 
   if (currentVersion === 'None') {
@@ -110,7 +125,7 @@ export const AntennaTypeStep: React.FC<AntennaTypeStepProps> = ({
     {
       id: '0dbi',
       label: '0 dBi',
-      badge: `₹${PRICING_CATALOG.antenna.dbi['0dbi']}`,
+      badge: `₹${applyPsychologicalPricing(PRICING_CATALOG.antenna.dbi['0dbi'])}`,
       subtitle: t('steps.antennaType.0dbiDesc', 'Standard direct omni coverage'),
       accentColor: 'border-emerald-500/80 ring-emerald-500/30',
       activeBtnClass: 'bg-emerald-600 text-white border-emerald-600 shadow-xs ring-2 ring-emerald-400/40',
@@ -120,7 +135,7 @@ export const AntennaTypeStep: React.FC<AntennaTypeStepProps> = ({
     {
       id: '6dbi',
       label: '6 dBi',
-      badge: `₹${PRICING_CATALOG.antenna.dbi['6dbi']}`,
+      badge: `₹${applyPsychologicalPricing(PRICING_CATALOG.antenna.dbi['6dbi'])}`,
       subtitle: t('steps.antennaType.6dbiDesc', 'Balanced medium-gain coverage'),
       accentColor: 'border-sky-500/80 ring-sky-500/30',
       activeBtnClass: 'bg-sky-600 text-white border-sky-600 shadow-xs ring-2 ring-sky-400/40',
@@ -130,7 +145,7 @@ export const AntennaTypeStep: React.FC<AntennaTypeStepProps> = ({
     {
       id: '12dbi',
       label: '12 dBi',
-      badge: `₹${PRICING_CATALOG.antenna.dbi['12dbi']}`,
+      badge: `₹${applyPsychologicalPricing(PRICING_CATALOG.antenna.dbi['12dbi'])}`,
       subtitle: t('steps.antennaType.12dbiDesc', 'Ultra long-range high-gain booster'),
       accentColor: 'border-amber-500/80 ring-amber-500/30',
       activeBtnClass: 'bg-amber-500 text-white border-amber-500 shadow-xs ring-2 ring-amber-400/40',
@@ -169,21 +184,21 @@ export const AntennaTypeStep: React.FC<AntennaTypeStepProps> = ({
             className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-[10px] sm:text-xs font-mono font-bold text-emerald-800 cursor-default"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            <span>0 dBi: +₹{PRICING_CATALOG.antenna.dbi['0dbi']}</span>
+            <span>0 dBi: +₹{applyPsychologicalPricing(PRICING_CATALOG.antenna.dbi['0dbi'])}</span>
           </motion.div>
           <motion.div
             whileHover={{ scale: 1.05 }}
             className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-[10px] sm:text-xs font-mono font-bold text-sky-800 cursor-default"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
-            <span>6 dBi: +₹{PRICING_CATALOG.antenna.dbi['6dbi']}</span>
+            <span>6 dBi: +₹{applyPsychologicalPricing(PRICING_CATALOG.antenna.dbi['6dbi'])}</span>
           </motion.div>
           <motion.div
             whileHover={{ scale: 1.05 }}
             className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-[10px] sm:text-xs font-mono font-bold text-amber-800 cursor-default"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-            <span>12 dBi: +₹{PRICING_CATALOG.antenna.dbi['12dbi']}</span>
+            <span>12 dBi: +₹{applyPsychologicalPricing(PRICING_CATALOG.antenna.dbi['12dbi'])}</span>
           </motion.div>
         </div>
       </motion.div>
@@ -282,7 +297,7 @@ export const AntennaTypeStep: React.FC<AntennaTypeStepProps> = ({
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-                      onClick={() => onSelectAntennaType(slot.id, tier.id)}
+                      onClick={() => handleSelectType(slot.id, tier.id)}
                       className={`py-1.5 sm:py-2 px-2 sm:px-3 rounded-lg sm:rounded-xl border transition-all flex flex-col items-center justify-center cursor-pointer min-w-[3.5rem] sm:min-w-[4.2rem] ${
                         isSelectedInThisTier
                           ? tier.activeBtnClass

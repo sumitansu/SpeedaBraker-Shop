@@ -198,6 +198,10 @@ export const PRICING_CATALOG: PricingCatalog = new Proxy({} as PricingCatalog, {
 });
 
 export const formatINR = (val: number): string => {
+  return `₹${applyPsychologicalPricing(val).toLocaleString('en-IN')}`;
+};
+
+export const formatRawINR = (val: number): string => {
   return `₹${(val || 0).toLocaleString('en-IN')}`;
 };
 
@@ -238,7 +242,17 @@ export const getBoxBorderStyle = (label: string, value: string): string => {
   return 'border-2 border-emerald-500 bg-emerald-50/30 text-neutral-900 shadow-2xs';
 };
 
-export const calculateTotalPrice = (
+/**
+ * Applies psychological pricing (charm pricing) to a calculated total.
+ * E.g., a total of ₹200 becomes ₹199, and two ₹200 items (₹400) become ₹399 ("total - 1").
+ * When amount is 0, returns 0.
+ */
+export const applyPsychologicalPricing = (amount: number): number => {
+  if (amount <= 0) return 0;
+  return Math.max(0, Math.round(amount) - 1);
+};
+
+export const calculateRawTotalPrice = (
   currentUpperBoxes: UpperBoxConfig[],
   currentSlots: LowerSlotConfig[],
   currentAntennaTypes?: Record<number, AntennaDbiType | undefined>,
@@ -289,6 +303,21 @@ export const calculateTotalPrice = (
   });
 
   return total;
+};
+
+export const calculateTotalPrice = (
+  currentUpperBoxes: UpperBoxConfig[],
+  currentSlots: LowerSlotConfig[],
+  currentAntennaTypes?: Record<number, AntennaDbiType | undefined>,
+  catalog: PricingCatalog = activePricingCatalog
+): number => {
+  const rawTotal = calculateRawTotalPrice(
+    currentUpperBoxes,
+    currentSlots,
+    currentAntennaTypes,
+    catalog
+  );
+  return applyPsychologicalPricing(rawTotal);
 };
 
 

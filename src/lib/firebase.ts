@@ -1,4 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import {
   initializeFirestore,
   getFirestore,
@@ -122,27 +123,67 @@ export enum OperationType {
   WRITE = 'write',
 }
 
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  };
+}
+
+// Initialize Firebase App & Auth
+export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfigData);
+export const auth = getAuth(app);
+
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo = {
+  const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     operationType,
     path,
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo:
+        auth.currentUser?.providerData?.map((provider) => ({
+          providerId: provider.providerId,
+          email: provider.email,
+        })) || [],
+    },
   };
   console.warn('Firestore Operation Notification:', JSON.stringify(errInfo));
 }
 
-// Initialize Firebase App & Firestore instance with auto-detect long polling for maximum reliability in browser/iframe environments
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfigData);
-
+// Configure Firestore instance with forced long polling in browser/iframe environments.
+// This prevents streaming connection timeout errors (code=unavailable / Could not reach Cloud Firestore backend)
+// that happen when reverse proxies or iframes buffer or interrupt WebChannel streams.
 let firestoreInstance: Firestore;
 try {
-  firestoreInstance = initializeFirestore(
-    app,
-    {
-      experimentalAutoDetectLongPolling: true,
-    },
-    firebaseConfigData.firestoreDatabaseId || undefined
-  );
+  if (typeof window !== 'undefined') {
+    firestoreInstance = initializeFirestore(
+      app,
+      {
+        experimentalForceLongPolling: true,
+      },
+      firebaseConfigData.firestoreDatabaseId || undefined
+    );
+  } else {
+    firestoreInstance = getFirestore(
+      app,
+      firebaseConfigData.firestoreDatabaseId || undefined
+    );
+  }
 } catch {
   firestoreInstance = getFirestore(
     app,
@@ -160,7 +201,11 @@ export async function testFirebaseConnection(): Promise<boolean> {
     return true;
   } catch (error) {
     if (error instanceof Error) {
-      console.info('Firebase connection note (offline/initializing):', error.message);
+      if (error.message.includes('the client is offline') || error.message.includes('unavailable')) {
+        console.info('Firestore is operating in offline/cached mode until backend reconnects.');
+      } else {
+        console.info('Firebase connection note (offline/initializing):', error.message);
+      }
     }
     return false;
   }

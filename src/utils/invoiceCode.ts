@@ -1,5 +1,10 @@
 import { UpperBoxConfig, LowerSlotConfig, AntennaDbiType, AppliedPromo } from '../types';
-import { calculateTotalPrice, PRICING_CATALOG } from './pricing';
+import {
+  calculateTotalPrice,
+  calculateRawTotalPrice,
+  applyPsychologicalPricing,
+  PRICING_CATALOG,
+} from './pricing';
 import {
   calculateDiscount,
   extractPromoTierFromCustomerCode,
@@ -164,7 +169,9 @@ export function generateOrderDetailsJson(
   const itemCode = generateBoughtItemCode(upperBoxes, slots, antennaDbiTypes);
   const MANDATORY_MODULES_COST = PRICING_CATALOG.mandatoryModules;
   const configuredSubtotal = calculateTotalPrice(upperBoxes, slots, antennaDbiTypes);
-  const grandTotal = configuredSubtotal + MANDATORY_MODULES_COST;
+  const rawGrandTotal =
+    calculateRawTotalPrice(upperBoxes, slots, antennaDbiTypes) + MANDATORY_MODULES_COST;
+  const grandTotal = applyPsychologicalPricing(rawGrandTotal);
   const { discountAmount, finalTotal } = calculateDiscount(grandTotal, appliedPromo || null);
   const baseCustomerCode = extractBaseCustomerCode(customerCode);
   const promoTier = extractPromoTierFromCustomerCode(customerCode);

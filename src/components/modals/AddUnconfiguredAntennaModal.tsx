@@ -2,13 +2,15 @@ import React from 'react';
 import { Radio, X, Sparkles, Check, Zap } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import { PRICING_CATALOG } from '../../utils/pricing';
+import { PRICING_CATALOG, applyPsychologicalPricing } from '../../utils/pricing';
 
 interface AddUnconfiguredAntennaModalProps {
   slotId: number;
   onClose: () => void;
   onAddAsNormal: () => void;
   onAddAsPowerful: () => void;
+  stockMap?: Record<string, boolean>;
+  onOutOfStockAttempt?: (itemName: string, alternative?: { name: string; onSelect: () => void }) => void;
 }
 
 export const AddUnconfiguredAntennaModal: React.FC<AddUnconfiguredAntennaModalProps> = ({
@@ -16,8 +18,29 @@ export const AddUnconfiguredAntennaModal: React.FC<AddUnconfiguredAntennaModalPr
   onClose,
   onAddAsNormal,
   onAddAsPowerful,
+  stockMap = {},
+  onOutOfStockAttempt,
 }) => {
   const { t } = useTranslation();
+
+  const isNormalInStock = stockMap['antenna_quality_normal'] !== false;
+  const isPowerfulInStock = stockMap['antenna_quality_powerful'] !== false;
+
+  const handleSelectNormal = () => {
+    if (!isNormalInStock) {
+      onOutOfStockAttempt?.(t('products.antennaNormal', 'Normal Antenna Quality'));
+      return;
+    }
+    onAddAsNormal();
+  };
+
+  const handleSelectPowerful = () => {
+    if (!isPowerfulInStock) {
+      onOutOfStockAttempt?.(t('products.antennaPowerful', 'Powerful Antenna Quality'));
+      return;
+    }
+    onAddAsPowerful();
+  };
 
   return (
     <motion.div
@@ -81,20 +104,30 @@ export const AddUnconfiguredAntennaModal: React.FC<AddUnconfiguredAntennaModalPr
             type="button"
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={onAddAsNormal}
-            className="p-3 rounded-xl border border-neutral-200 hover:border-emerald-500 hover:bg-emerald-50/30 transition-all text-left group cursor-pointer flex flex-col justify-between"
+            onClick={handleSelectNormal}
+            className={`p-3 rounded-xl border transition-all text-left flex flex-col justify-between cursor-pointer ${
+              !isNormalInStock
+                ? 'border-rose-200 bg-white/70 shadow-2xs hover:border-rose-300'
+                : 'border-neutral-200 hover:border-emerald-500 hover:bg-emerald-50/30 group bg-white'
+            }`}
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-neutral-900 group-hover:text-emerald-700">
+              <span className={`text-xs font-bold ${isNormalInStock ? 'text-neutral-900 group-hover:text-emerald-700' : 'text-neutral-500'}`}>
                 {t('antennaQuality.normal', 'Normal')}
               </span>
-              <Check className="w-3.5 h-3.5 text-neutral-400 group-hover:text-emerald-600" />
+              {isNormalInStock ? (
+                <Check className="w-3.5 h-3.5 text-neutral-400 group-hover:text-emerald-600" />
+              ) : (
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                  {t('common.outOfStock', 'Out of Stock')}
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-neutral-500 mb-2 leading-tight">
               {t('antennaQuality.normalDesc', 'Standard performance module')}
             </p>
-            <span className="text-sm font-mono font-bold text-neutral-900 group-hover:text-emerald-700">
-              ₹{PRICING_CATALOG.antenna.quality.Normal}
+            <span className={`text-sm font-mono font-bold ${isNormalInStock ? 'text-neutral-900 group-hover:text-emerald-700' : 'text-neutral-400 line-through'}`}>
+              ₹{applyPsychologicalPricing(PRICING_CATALOG.antenna.quality.Normal)}
             </span>
           </motion.button>
 
@@ -104,23 +137,33 @@ export const AddUnconfiguredAntennaModal: React.FC<AddUnconfiguredAntennaModalPr
             type="button"
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={onAddAsPowerful}
-            className="p-3 rounded-xl border border-neutral-200 hover:border-amber-500 hover:bg-amber-50/30 transition-all text-left group cursor-pointer flex flex-col justify-between"
+            onClick={handleSelectPowerful}
+            className={`p-3 rounded-xl border transition-all text-left flex flex-col justify-between cursor-pointer ${
+              !isPowerfulInStock
+                ? 'border-rose-200 bg-white/70 shadow-2xs hover:border-rose-300'
+                : 'border-neutral-200 hover:border-amber-500 hover:bg-amber-50/30 group bg-white'
+            }`}
           >
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1">
-                <span className="text-xs font-bold text-neutral-900 group-hover:text-amber-700">
+                <span className={`text-xs font-bold ${isPowerfulInStock ? 'text-neutral-900 group-hover:text-amber-700' : 'text-neutral-500'}`}>
                   {t('antennaQuality.powerful', 'Powerful')}
                 </span>
-                <Zap className="w-3 h-3 text-amber-500 fill-amber-500" />
+                <Zap className={`w-3 h-3 ${isPowerfulInStock ? 'text-amber-500 fill-amber-500' : 'text-neutral-400 fill-neutral-400'}`} />
               </div>
-              <Sparkles className="w-3.5 h-3.5 text-neutral-400 group-hover:text-amber-600" />
+              {isPowerfulInStock ? (
+                <Sparkles className="w-3.5 h-3.5 text-neutral-400 group-hover:text-amber-600" />
+              ) : (
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                  {t('common.outOfStock', 'Out of Stock')}
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-neutral-500 mb-2 leading-tight">
               {t('antennaQuality.powerfulDesc', 'High-gain high-power module')}
             </p>
-            <span className="text-sm font-mono font-bold text-neutral-900 group-hover:text-amber-700">
-              ₹{PRICING_CATALOG.antenna.quality.Powerful}
+            <span className={`text-sm font-mono font-bold ${isPowerfulInStock ? 'text-neutral-900 group-hover:text-amber-700' : 'text-neutral-400 line-through'}`}>
+              ₹{applyPsychologicalPricing(PRICING_CATALOG.antenna.quality.Powerful)}
             </span>
           </motion.button>
         </div>

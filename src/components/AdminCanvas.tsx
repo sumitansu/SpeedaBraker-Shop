@@ -33,6 +33,7 @@ import {
   subscribePromoCodes,
   fetchAllPromoCodesFromFirestore,
   DEFAULT_PRODUCT_STOCK,
+  updateProductStockInFirestore,
 } from '../lib/firebase';
 import {
   getPricingCatalog,
@@ -164,8 +165,8 @@ const AdminCanvasComponent: React.FC<AdminCanvasProps> = ({
     setTimeout(() => setPricingSuccessMsg(null), 3500);
   };
 
-  // Stock toggle handler (Local in-code state)
-  const handleToggleStock = (product: ProductStockRecord) => {
+  // Stock toggle handler (Persisted to Firestore and local state)
+  const handleToggleStock = async (product: ProductStockRecord) => {
     const nextState = !product.inStock;
     setStockSuccessMsg(null);
 
@@ -180,9 +181,20 @@ const AdminCanvasComponent: React.FC<AdminCanvasProps> = ({
     }
     onStockUpdated(updatedMap);
 
-    setStockSuccessMsg(
-      `"${product.productName}" updated to ${nextState ? 'IN STOCK' : 'OUT OF STOCK'}`
-    );
+    try {
+      await updateProductStockInFirestore(product.productId, nextState, {
+        productName: product.productName,
+        category: product.category,
+      });
+      setStockSuccessMsg(
+        `"${product.productName}" updated to ${nextState ? 'IN STOCK' : 'OUT OF STOCK'}`
+      );
+    } catch (err) {
+      console.error('Failed to update stock in Firestore:', err);
+      setStockSuccessMsg(
+        `"${product.productName}" updated to ${nextState ? 'IN STOCK' : 'OUT OF STOCK'}`
+      );
+    }
     setTimeout(() => setStockSuccessMsg(null), 3000);
   };
 

@@ -39,12 +39,12 @@ export const TopStatusGrid: React.FC<TopStatusGridProps> = ({
   return (
     <section
       id="top-one-third-canvas"
-      className="shrink-0 w-full flex flex-col p-2.5 sm:p-3 md:p-4 bg-white/90"
+      className="shrink-0 w-full flex flex-col p-2 xs:p-2.5 sm:p-3 md:p-4 bg-white/95 backdrop-blur-xs border-b border-neutral-200/80"
     >
       {/* Upper Part of Top (3 equal horizontal boxes: Version, Display, Wireless) */}
       <div
         id="upper-part-grid"
-        className="w-full grid grid-cols-3 gap-1.5 sm:gap-3 md:gap-4 mb-2 sm:mb-2.5"
+        className="w-full grid grid-cols-3 gap-1.5 sm:gap-2.5 md:gap-3 lg:gap-4 mb-1.5 sm:mb-2 md:mb-2.5"
       >
         {upperBoxes.map((box, index) => (
           <div
@@ -59,13 +59,13 @@ export const TopStatusGrid: React.FC<TopStatusGridProps> = ({
               transition={{ type: 'spring', stiffness: 500, damping: 30 }}
               onClick={() => onToggleUpperBox(box.id)}
               title={`Click to toggle ${box.label} status`}
-              className={`w-full py-1.5 sm:py-2 rounded-xl ${getBoxBorderStyle(
+              className={`w-full h-9 xs:h-10 sm:h-11 md:h-12 min-h-[36px] rounded-xl sm:rounded-2xl ${getBoxBorderStyle(
                 box.label,
                 box.value
-              )} px-2.5 sm:px-4 md:px-5 flex items-center justify-between gap-1.5 sm:gap-2 min-w-0 shadow-xs cursor-pointer select-none`}
+              )} px-2 xs:px-2.5 sm:px-3.5 md:px-4 flex items-center justify-between gap-1 sm:gap-2 min-w-0 shadow-xs cursor-pointer select-none transition-all`}
             >
               {/* Left Side Text */}
-              <span className="text-xs sm:text-sm md:text-base font-bold text-neutral-800 tracking-tight truncate">
+              <span className="text-[11px] xs:text-xs sm:text-sm md:text-base font-bold text-neutral-800 tracking-tight truncate">
                 {getTranslatedLabel(box.label)}
               </span>
 
@@ -76,7 +76,7 @@ export const TopStatusGrid: React.FC<TopStatusGridProps> = ({
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ type: 'spring', stiffness: 500, damping: 25 }}
                 id={`upper-dark-box-${index + 1}`}
-                className="bg-neutral-900 text-white text-[11px] sm:text-xs md:text-sm font-mono font-bold px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg shadow-xs flex items-center justify-center shrink-0 min-w-[2rem] sm:min-w-[2.6rem]"
+                className="bg-neutral-900 text-white text-[10px] xs:text-[11px] sm:text-xs md:text-sm font-mono font-bold px-1.5 xs:px-2 sm:px-3 py-0.5 sm:py-1 rounded-md sm:rounded-lg shadow-2xs flex items-center justify-center shrink-0 min-w-[1.8rem] xs:min-w-[2.2rem] sm:min-w-[2.6rem]"
               >
                 {box.value}
               </motion.div>
@@ -88,12 +88,12 @@ export const TopStatusGrid: React.FC<TopStatusGridProps> = ({
       {/* Lower Part of Top (4 Antenna boxes + Total Price Display) */}
       <div
         id="lower-part-grid"
-        className="w-full grid grid-cols-3 gap-1.5 sm:gap-3 md:gap-4"
+        className="w-full grid grid-cols-3 gap-1.5 sm:gap-2.5 md:gap-3 lg:gap-4 items-stretch"
       >
         {/* 2/3 horizontal way: 4 standalone antenna boxes arranged in a 2x2 grid */}
         <div
           id="antenna-boxes-grid"
-          className="col-span-2 grid grid-cols-2 grid-rows-2 gap-1.5 sm:gap-2.5 min-w-0"
+          className="col-span-2 grid grid-cols-2 grid-rows-2 gap-1.5 sm:gap-2 md:gap-2.5 min-w-0"
         >
           {slots.map((slot) => {
             const dbi = antennaDbiTypes ? antennaDbiTypes[slot.id] : undefined;
@@ -108,13 +108,13 @@ export const TopStatusGrid: React.FC<TopStatusGridProps> = ({
                 transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                 onClick={() => onToggleSlot(slot.id)}
                 title={`Click to customize Antenna ${slot.id}`}
-                className={`w-full rounded-xl ${getBoxBorderStyle(
+                className={`w-full min-h-[50px] xs:min-h-[56px] sm:min-h-[62px] md:min-h-[70px] rounded-xl sm:rounded-2xl ${getBoxBorderStyle(
                   slot.label,
                   slot.value
-                )} flex flex-col justify-between p-1.5 sm:p-2 md:p-2.5 text-left min-w-0 shadow-xs cursor-pointer select-none overflow-hidden`}
+                )} flex flex-col justify-between p-1.5 xs:p-2 sm:p-2.5 md:p-3 text-left min-w-0 shadow-xs cursor-pointer select-none overflow-hidden transition-all`}
               >
                 {/* Top part: Antenna */}
-                <span className="text-xs sm:text-sm md:text-base font-bold text-neutral-800 tracking-tight truncate">
+                <span className="text-[11px] xs:text-xs sm:text-sm md:text-base font-bold text-neutral-800 tracking-tight truncate">
                   {getTranslatedLabel(slot.label)}
                 </span>
 
@@ -129,13 +129,13 @@ export const TopStatusGrid: React.FC<TopStatusGridProps> = ({
                     </span>
                     <span
                       id={`antenna-slot-divider-${slot.id}`}
-                      className="text-neutral-300 font-normal select-none text-[10px] sm:text-xs shrink-0"
+                      className="text-neutral-300 font-normal select-none text-[10px] sm:text-xs shrink-0 mx-0.5"
                     >
                       |
                     </span>
                     <span
                       id={`antenna-slot-dbi-${slot.id}`}
-                      className="text-[9px] sm:text-[11px] md:text-xs font-mono font-semibold text-neutral-600 shrink-0 whitespace-nowrap"
+                      className="text-[9px] xs:text-[10px] sm:text-[11px] md:text-xs font-mono font-semibold text-neutral-600 shrink-0 whitespace-nowrap"
                     >
                       {displayDbi}
                     </span>
@@ -145,7 +145,7 @@ export const TopStatusGrid: React.FC<TopStatusGridProps> = ({
                     initial={{ scale: 0.85 }}
                     animate={{ scale: 1 }}
                     transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-                    className="bg-neutral-900 text-white font-mono font-bold text-[9px] sm:text-[10px] md:text-xs px-1.5 sm:px-2 py-0.5 rounded-md sm:rounded-lg shadow-2xs flex items-center justify-center shrink-0 tracking-tight"
+                    className="bg-neutral-900 text-white font-mono font-bold text-[9px] xs:text-[10px] sm:text-[11px] md:text-xs px-1.5 xs:px-2 py-0.5 rounded-md sm:rounded-lg shadow-2xs flex items-center justify-center shrink-0 tracking-tight"
                   >
                     {slot.value}
                   </motion.div>
@@ -155,17 +155,17 @@ export const TopStatusGrid: React.FC<TopStatusGridProps> = ({
           })}
         </div>
 
-        {/* Rest on right (1/3 horizontal way) has the clean, big price display without a box */}
+        {/* Rest on right (1/3 horizontal way) has the cleanly framed total price display */}
         <div
           id="price-display-container"
-          className="col-span-1 flex flex-col items-center justify-center min-w-0 px-1 sm:px-3"
+          className="col-span-1 flex flex-col items-center justify-center min-w-0"
         >
           <div
             id="total-price-display"
-            className="w-full h-full flex flex-col items-center justify-center text-center select-text relative"
+            className="w-full h-full rounded-xl sm:rounded-2xl border-2 border-neutral-300/80 bg-neutral-50/70 hover:bg-neutral-50 p-1.5 xs:p-2 sm:p-2.5 md:p-3 shadow-2xs flex flex-col items-center justify-center text-center select-text relative transition-all overflow-hidden"
           >
-            <div className="flex items-center justify-center gap-1.5 mb-0.5 min-h-[1.25rem]">
-              <span className="text-[10px] sm:text-xs uppercase tracking-widest text-neutral-400 font-bold">
+            <div className="flex items-center justify-center gap-1 sm:gap-1.5 mb-0.5 sm:mb-1 min-h-[1.15rem] sm:min-h-[1.35rem]">
+              <span className="text-[9px] xs:text-[10px] sm:text-xs uppercase tracking-widest text-neutral-500 font-bold">
                 {t('topGrid.totalEstimate', 'Total')}
               </span>
               <AnimatePresence mode="popLayout">
@@ -177,7 +177,7 @@ export const TopStatusGrid: React.FC<TopStatusGridProps> = ({
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.7, opacity: 0 }}
                     transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-                    className={`text-[10px] sm:text-xs font-mono font-bold px-1.5 py-0.5 rounded-md shadow-2xs ${
+                    className={`text-[8px] xs:text-[9px] sm:text-[10px] md:text-xs font-mono font-bold px-1 sm:px-1.5 py-0.5 rounded-md shadow-2xs ${
                       priceDiff > 0
                         ? 'bg-emerald-100 text-emerald-700 border border-emerald-300/80'
                         : 'bg-red-100 text-red-600 border border-red-300/80'
@@ -197,10 +197,10 @@ export const TopStatusGrid: React.FC<TopStatusGridProps> = ({
                   : 'text-neutral-900'
               }`}
             >
-              <span className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold mr-0.5">
+              <span className="text-base xs:text-lg sm:text-2xl md:text-3xl lg:text-4xl font-bold mr-0.5 sm:mr-1 shrink-0">
                 ₹
               </span>
-              <span className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black truncate max-w-full">
+              <span className="text-lg xs:text-xl sm:text-3xl md:text-4xl lg:text-5xl font-black truncate max-w-full">
                 {animatedPrice.toLocaleString('en-IN')}
               </span>
             </div>

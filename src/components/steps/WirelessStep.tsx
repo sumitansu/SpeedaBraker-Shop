@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AlertCircle, Wifi, WifiOff, Info, Check, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import { PRICING_CATALOG } from '../../utils/pricing';
+import { PRICING_CATALOG, applyPsychologicalPricing } from '../../utils/pricing';
 
 interface WirelessStepProps {
   currentVersion: string;
@@ -11,6 +11,7 @@ interface WirelessStepProps {
   onOpenWirelessWarning: () => void;
   onGoToFirmware: () => void;
   stockMap?: Record<string, boolean>;
+  onOutOfStockAttempt?: (itemName: string) => void;
 }
 
 export const WirelessStep: React.FC<WirelessStepProps> = ({
@@ -20,11 +21,22 @@ export const WirelessStep: React.FC<WirelessStepProps> = ({
   onOpenWirelessWarning,
   onGoToFirmware,
   stockMap,
+  onOutOfStockAttempt,
 }) => {
   const { t } = useTranslation();
   const isWirelessInStock = stockMap?.['wireless_5ghz'] !== false;
   const [copiedIp, setCopiedIp] = useState<boolean>(false);
   const copyTimerRef = useRef<number | null>(null);
+
+  const handleSelectYes = () => {
+    if (!isWirelessInStock) {
+      onOutOfStockAttempt?.(
+        t('products.wireless5ghz', '5GHz High-Speed Wireless Control Module')
+      );
+      return;
+    }
+    onSelectWireless('Yes');
+  };
 
   useEffect(() => {
     return () => {
@@ -200,10 +212,12 @@ export const WirelessStep: React.FC<WirelessStepProps> = ({
           whileHover={{ y: -3, scale: 1.008 }}
           whileTap={{ scale: 0.985 }}
           transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-          onClick={() => onSelectWireless('Yes')}
+          onClick={handleSelectYes}
           className={`rounded-xl sm:rounded-2xl transition-all duration-200 flex flex-col justify-between p-3 sm:p-5 cursor-pointer min-h-0 ${
             currentWireless === 'Yes'
               ? 'bg-white border-2 border-emerald-500 shadow-md ring-2 sm:ring-4 ring-emerald-500/10'
+              : !isWirelessInStock
+              ? 'bg-white/70 border border-rose-200 shadow-xs hover:border-rose-300'
               : 'bg-white/90 border border-neutral-200/90 shadow-xs hover:border-neutral-300 hover:bg-white hover:shadow-sm'
           }`}
         >
@@ -322,8 +336,10 @@ export const WirelessStep: React.FC<WirelessStepProps> = ({
               <span className="text-[10px] sm:text-xs uppercase tracking-wider text-neutral-400 font-semibold">
                 {t('bill.price', 'Cost')}
               </span>
-              <span className="text-base sm:text-xl md:text-2xl font-mono font-black text-neutral-900">
-                ₹{PRICING_CATALOG.wireless.Yes + (currentVersion === 'V1' ? (PRICING_CATALOG.version.V2 - PRICING_CATALOG.version.V1) : 0)}
+              <span className={`text-base sm:text-xl md:text-2xl font-mono font-black ${
+                isWirelessInStock ? 'text-neutral-900' : 'text-neutral-400 line-through'
+              }`}>
+                ₹{applyPsychologicalPricing(PRICING_CATALOG.wireless.Yes + (currentVersion === 'V1' ? (PRICING_CATALOG.version.V2 - PRICING_CATALOG.version.V1) : 0))}
               </span>
             </div>
 
@@ -334,16 +350,20 @@ export const WirelessStep: React.FC<WirelessStepProps> = ({
               whileTap={{ scale: 0.96 }}
               onClick={(e) => {
                 e.stopPropagation();
-                onSelectWireless('Yes');
+                handleSelectYes();
               }}
-              className={`px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-mono text-xs sm:text-sm font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 currentWireless === 'Yes' && currentVersion === 'V2'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-neutral-900 text-white hover:bg-neutral-800'
+                  ? 'px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-mono text-xs sm:text-sm font-bold uppercase tracking-wider bg-emerald-600 text-white shadow-xs'
+                  : !isWirelessInStock
+                  ? 'px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-lg text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/90 shadow-2xs'
+                  : 'px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-mono text-xs sm:text-sm font-bold uppercase tracking-wider bg-neutral-900 text-white hover:bg-neutral-800'
               }`}
             >
               {currentWireless === 'Yes' && currentVersion === 'V2'
                 ? t('steps.wireless.yes.selected', 'Selected')
+                : !isWirelessInStock
+                ? t('common.outOfStock', 'Out of Stock')
                 : currentVersion === 'V1'
                 ? t('steps.wireless.yes.changeToV2', 'Change to V2')
                 : t('steps.wireless.yes.select', 'Yes')}

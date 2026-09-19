@@ -3,7 +3,7 @@ import { Radio, AlertCircle, Zap, Plus, Check, ShieldCheck } from 'lucide-react'
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import { LowerSlotConfig } from '../../types';
-import { PRICING_CATALOG } from '../../utils/pricing';
+import { PRICING_CATALOG, applyPsychologicalPricing } from '../../utils/pricing';
 
 interface AntennaQualityStepProps {
   currentVersion: string;
@@ -13,6 +13,7 @@ interface AntennaQualityStepProps {
   onGoToFirmware: () => void;
   onGoToAntennas: () => void;
   stockMap?: Record<string, boolean>;
+  onOutOfStockAttempt?: (itemName: string) => void;
 }
 
 interface QualityTierConfig {
@@ -34,10 +35,24 @@ export const AntennaQualityStep: React.FC<AntennaQualityStepProps> = ({
   onGoToFirmware,
   onGoToAntennas,
   stockMap,
+  onOutOfStockAttempt,
 }) => {
   const { t } = useTranslation();
   const isNormalInStock = stockMap?.['antenna_quality_normal'] !== false;
   const isPowerfulInStock = stockMap?.['antenna_quality_powerful'] !== false;
+
+  const handleSelectQuality = (slotId: number, quality: 'Normal' | 'Powerful') => {
+    const isInStock = quality === 'Normal' ? isNormalInStock : isPowerfulInStock;
+    if (!isInStock) {
+      const itemName =
+        quality === 'Normal'
+          ? t('products.antennaNormal', 'Normal Antenna Quality')
+          : t('products.antennaPowerful', 'Powerful Antenna Quality');
+      onOutOfStockAttempt?.(itemName);
+      return;
+    }
+    onSetSlotQuality(slotId, quality);
+  };
 
   if (currentVersion === 'None') {
     return (
@@ -101,7 +116,7 @@ export const AntennaQualityStep: React.FC<AntennaQualityStepProps> = ({
     {
       id: 'Normal',
       label: t('steps.antennaQuality.normalTitle', 'Normal Module'),
-      badge: `₹${PRICING_CATALOG.antenna.quality.Normal}`,
+      badge: `₹${applyPsychologicalPricing(PRICING_CATALOG.antenna.quality.Normal)}`,
       subtitle: t('steps.antennaQuality.normalDesc', 'Standard reliable transmission & efficiency'),
       accentColor: 'border-emerald-500/80 ring-emerald-500/30',
       activeBtnClass: 'bg-emerald-600 text-white border-emerald-600 shadow-xs ring-2 ring-emerald-400/40',
@@ -111,7 +126,7 @@ export const AntennaQualityStep: React.FC<AntennaQualityStepProps> = ({
     {
       id: 'Powerful',
       label: t('steps.antennaQuality.powerfulTitle', 'Powerful Module'),
-      badge: `₹${PRICING_CATALOG.antenna.quality.Powerful}`,
+      badge: `₹${applyPsychologicalPricing(PRICING_CATALOG.antenna.quality.Powerful)}`,
       subtitle: t('steps.antennaQuality.powerfulDesc', 'High-power output & maximum signal reach'),
       accentColor: 'border-amber-500/80 ring-amber-500/30',
       activeBtnClass: 'bg-amber-500 text-white border-amber-500 shadow-xs ring-2 ring-amber-400/40',
@@ -154,7 +169,7 @@ export const AntennaQualityStep: React.FC<AntennaQualityStepProps> = ({
             className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] sm:text-xs font-mono font-bold shadow-2xs cursor-default"
           >
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-            <span>Normal: +₹{PRICING_CATALOG.antenna.quality.Normal}</span>
+            <span>Normal: +₹{applyPsychologicalPricing(PRICING_CATALOG.antenna.quality.Normal)}</span>
           </motion.div>
           <motion.div
             id="tab-powerful-module-price"
@@ -162,7 +177,7 @@ export const AntennaQualityStep: React.FC<AntennaQualityStepProps> = ({
             className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[10px] sm:text-xs font-mono font-bold shadow-2xs cursor-default"
           >
             <Zap className="w-3 h-3 text-amber-600 fill-amber-500 shrink-0" />
-            <span>Powerful: +₹{PRICING_CATALOG.antenna.quality.Powerful}</span>
+            <span>Powerful: +₹{applyPsychologicalPricing(PRICING_CATALOG.antenna.quality.Powerful)}</span>
           </motion.div>
         </div>
       </motion.div>
@@ -265,7 +280,7 @@ export const AntennaQualityStep: React.FC<AntennaQualityStepProps> = ({
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                       transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-                      onClick={() => onSetSlotQuality(slot.id, tier.id)}
+                      onClick={() => handleSelectQuality(slot.id, tier.id)}
                       className={`py-1.5 sm:py-2 px-2 sm:px-3 rounded-lg sm:rounded-xl border transition-all flex flex-col items-center justify-center cursor-pointer min-w-[3.5rem] sm:min-w-[4.2rem] ${
                         isSelectedInThisTier
                           ? tier.activeBtnClass

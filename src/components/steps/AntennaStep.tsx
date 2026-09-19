@@ -2,7 +2,7 @@ import React from 'react';
 import { AlertCircle, Radio, Sparkles, Check, Info } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import { PRICING_CATALOG } from '../../utils/pricing';
+import { PRICING_CATALOG, applyPsychologicalPricing } from '../../utils/pricing';
 
 interface AntennaStepProps {
   currentVersion: string;
@@ -141,7 +141,7 @@ export const AntennaStep: React.FC<AntennaStepProps> = ({
                   {t('bill.price', 'Cost')}
                 </span>
                 <span className="text-base sm:text-xl md:text-2xl font-mono font-black text-neutral-900">
-                  ₹{PRICING_CATALOG.antenna.baseSocket * 2}
+                  ₹{applyPsychologicalPricing(PRICING_CATALOG.antenna.baseSocket * 2)}
                 </span>
               </div>
 
@@ -205,7 +205,7 @@ export const AntennaStep: React.FC<AntennaStepProps> = ({
                   {t('bill.price', 'Cost')}
                 </span>
                 <span className="text-base sm:text-xl md:text-2xl font-mono font-black text-neutral-900">
-                  ₹{PRICING_CATALOG.version.V2 - PRICING_CATALOG.version.V1}
+                  ₹{applyPsychologicalPricing(PRICING_CATALOG.version.V2 - PRICING_CATALOG.version.V1)}
                 </span>
               </div>
 
@@ -250,7 +250,7 @@ export const AntennaStep: React.FC<AntennaStepProps> = ({
           {t('steps.antenna.title', 'How many antennas?')}
         </h2>
         <p className="text-xs sm:text-sm text-neutral-600 mt-0.5 max-w-xl mx-auto">
-          {t('steps.antenna.v2Desc', 'Choose 1 to 4 antennas. ₹{{price}} per antenna.', { price: PRICING_CATALOG.antenna.baseSocket })}
+          {t('steps.antenna.v2Desc', 'Choose 1 to 4 antennas. ₹{{price}} per antenna.', { price: applyPsychologicalPricing(PRICING_CATALOG.antenna.baseSocket) })}
         </p>
       </motion.div>
 
@@ -363,7 +363,7 @@ export const AntennaStep: React.FC<AntennaStepProps> = ({
                     {t('bill.price', 'Cost')}
                   </span>
                   <span className="text-sm sm:text-base md:text-lg font-mono font-black text-neutral-900">
-                    ₹{item.count * PRICING_CATALOG.antenna.baseSocket}
+                    ₹{applyPsychologicalPricing(item.count * PRICING_CATALOG.antenna.baseSocket)}
                   </span>
                 </div>
 

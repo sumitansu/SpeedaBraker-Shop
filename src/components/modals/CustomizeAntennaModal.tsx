@@ -3,7 +3,7 @@ import { Radio, X, Check, Power, AlertTriangle, ArrowUpRight, Zap } from 'lucide
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import { AntennaDbiType } from '../../types';
-import { PRICING_CATALOG } from '../../utils/pricing';
+import { PRICING_CATALOG, applyPsychologicalPricing } from '../../utils/pricing';
 
 interface CustomizeAntennaModalProps {
   slotId: number;
@@ -16,6 +16,8 @@ interface CustomizeAntennaModalProps {
   onChangeQuality: (slotId: number, quality: 'Normal' | 'Powerful') => void;
   onChangeDbi: (slotId: number, dbi: AntennaDbiType) => void;
   onUpgradeToV2: (slotId: number) => void;
+  stockMap?: Record<string, boolean>;
+  onOutOfStockAttempt?: (itemName: string, alternative?: { name: string; onSelect: () => void }) => void;
 }
 
 export const CustomizeAntennaModal: React.FC<CustomizeAntennaModalProps> = ({
@@ -29,10 +31,47 @@ export const CustomizeAntennaModal: React.FC<CustomizeAntennaModalProps> = ({
   onChangeQuality,
   onChangeDbi,
   onUpgradeToV2,
+  stockMap = {},
+  onOutOfStockAttempt,
 }) => {
   const { t } = useTranslation();
   const isInactive = slotStatus.toLowerCase() === 'none';
   const isV1SlotLimit = currentVersion === 'V1' && slotId > 2;
+
+  const isNormalInStock = stockMap['antenna_quality_normal'] !== false;
+  const isPowerfulInStock = stockMap['antenna_quality_powerful'] !== false;
+
+  const is0dbiInStock = stockMap['antenna_dbi_0'] !== false;
+  const is6dbiInStock = stockMap['antenna_dbi_6'] !== false;
+  const is12dbiInStock = stockMap['antenna_dbi_12'] !== false;
+
+  const handleSelectQuality = (quality: 'Normal' | 'Powerful') => {
+    const inStock = quality === 'Normal' ? isNormalInStock : isPowerfulInStock;
+    if (!inStock) {
+      const itemName =
+        quality === 'Normal'
+          ? t('products.antennaNormal', 'Normal Antenna Quality')
+          : t('products.antennaPowerful', 'Powerful Antenna Quality');
+      onOutOfStockAttempt?.(itemName);
+      return;
+    }
+    onChangeQuality(slotId, quality);
+  };
+
+  const handleSelectDbi = (dbi: AntennaDbiType) => {
+    const isDbiAvailable =
+      dbi === '0dbi' ? is0dbiInStock : dbi === '6dbi' ? is6dbiInStock : is12dbiInStock;
+    if (!isDbiAvailable) {
+      const dbiNames: Record<AntennaDbiType, string> = {
+        '0dbi': t('products.antenna0dbi', '0 dBi Stubby Antenna'),
+        '6dbi': t('products.antenna6dbi', '6 dBi High-Gain Antenna'),
+        '12dbi': t('products.antenna12dbi', '12 dBi Long-Range Antenna'),
+      };
+      onOutOfStockAttempt?.(dbiNames[dbi] || `${dbi} Antenna`);
+      return;
+    }
+    onChangeDbi(slotId, dbi);
+  };
 
   // Calculate live antenna specific cost using PRICING_CATALOG
   const baseCost = isInactive ? 0 : PRICING_CATALOG.antenna.baseSocket;
@@ -114,7 +153,7 @@ export const CustomizeAntennaModal: React.FC<CustomizeAntennaModalProps> = ({
             <p className="text-xs text-neutral-500">
               {isInactive
                 ? t('modals.customizeAntenna.slotDeactivated', 'Slot is currently deactivated')
-                : `${t('modals.customizeAntenna.activeCost', 'Active slot cost')}: ₹${totalAntennaCost}`}
+                : `${t('modals.customizeAntenna.activeCost', 'Active slot cost')}: ₹${applyPsychologicalPricing(totalAntennaCost)}`}
             </p>
           </div>
         </div>
@@ -171,7 +210,7 @@ export const CustomizeAntennaModal: React.FC<CustomizeAntennaModalProps> = ({
                     className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs sm:text-sm rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Power className="w-4 h-4" />
-                    <span>{t('modals.customizeAntenna.activateBtn', { defaultValue: 'Activate Antenna Slot {{slot}} (+₹{{base}} base)', slot: slotId, base: PRICING_CATALOG.antenna.baseSocket })}</span>
+                    <span>{t('modals.customizeAntenna.activateBtn', { defaultValue: 'Activate Antenna Slot {{slot}} (+₹{{base}} base)', slot: slotId, base: applyPsychologicalPricing(PRICING_CATALOG.antenna.baseSocket) })}</span>
                   </motion.button>
                 </div>
               </div>
@@ -199,24 +238,31 @@ export const CustomizeAntennaModal: React.FC<CustomizeAntennaModalProps> = ({
                   type="button"
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => onChangeQuality(slotId, 'Normal')}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                    slotStatus === 'Normal'
+                  onClick={() => handleSelectQuality('Normal')}
+                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
+                    !isNormalInStock
+                      ? 'border-rose-200 bg-white/70 shadow-2xs hover:border-rose-300'
+                      : slotStatus === 'Normal'
                       ? 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-500/20 shadow-xs'
                       : 'border-neutral-200 hover:border-neutral-300 bg-white'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-neutral-900">{t('antennaQuality.normal', 'Normal')}</span>
-                    {slotStatus === 'Normal' && (
+                    <span className={`text-xs font-bold ${isNormalInStock ? 'text-neutral-900' : 'text-neutral-500'}`}>{t('antennaQuality.normal', 'Normal')}</span>
+                    {slotStatus === 'Normal' && isNormalInStock && (
                       <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[2.5]" />
+                    )}
+                    {!isNormalInStock && (
+                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                        {t('common.outOfStock', 'Out of Stock')}
+                      </span>
                     )}
                   </div>
                   <p className="text-[10px] text-neutral-500 mb-2 leading-tight">
                     {t('antennaQuality.normalDesc', 'Standard efficiency & reliability')}
                   </p>
-                  <span className="text-xs font-mono font-bold text-emerald-700">
-                    +₹{PRICING_CATALOG.antenna.quality.Normal}
+                  <span className={`text-xs font-mono font-bold ${isNormalInStock ? 'text-emerald-700' : 'text-neutral-400 line-through'}`}>
+                    +₹{applyPsychologicalPricing(PRICING_CATALOG.antenna.quality.Normal)}
                   </span>
                 </motion.button>
 
@@ -226,27 +272,34 @@ export const CustomizeAntennaModal: React.FC<CustomizeAntennaModalProps> = ({
                   type="button"
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => onChangeQuality(slotId, 'Powerful')}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                    slotStatus === 'Powerful'
+                  onClick={() => handleSelectQuality('Powerful')}
+                  className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
+                    !isPowerfulInStock
+                      ? 'border-rose-200 bg-white/70 shadow-2xs hover:border-rose-300'
+                      : slotStatus === 'Powerful'
                       ? 'border-amber-500 bg-amber-50/50 ring-2 ring-amber-500/20 shadow-xs'
                       : 'border-neutral-200 hover:border-neutral-300 bg-white'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-1">
-                      <span className="text-xs font-bold text-neutral-900">{t('antennaQuality.powerful', 'Powerful')}</span>
-                      <Zap className="w-3 h-3 text-amber-500 fill-amber-500" />
+                      <span className={`text-xs font-bold ${isPowerfulInStock ? 'text-neutral-900' : 'text-neutral-500'}`}>{t('antennaQuality.powerful', 'Powerful')}</span>
+                      <Zap className={`w-3 h-3 ${isPowerfulInStock ? 'text-amber-500 fill-amber-500' : 'text-neutral-400 fill-neutral-400'}`} />
                     </div>
-                    {slotStatus === 'Powerful' && (
+                    {slotStatus === 'Powerful' && isPowerfulInStock && (
                       <Check className="w-3.5 h-3.5 text-amber-600 stroke-[2.5]" />
+                    )}
+                    {!isPowerfulInStock && (
+                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                        {t('common.outOfStock', 'Out of Stock')}
+                      </span>
                     )}
                   </div>
                   <p className="text-[10px] text-neutral-500 mb-2 leading-tight">
                     {t('antennaQuality.powerfulDesc', 'High power transmission & range')}
                   </p>
-                  <span className="text-xs font-mono font-bold text-amber-700">
-                    +₹{PRICING_CATALOG.antenna.quality.Powerful}
+                  <span className={`text-xs font-mono font-bold ${isPowerfulInStock ? 'text-amber-700' : 'text-neutral-400 line-through'}`}>
+                    +₹{applyPsychologicalPricing(PRICING_CATALOG.antenna.quality.Powerful)}
                   </span>
                 </motion.button>
               </div>
@@ -269,22 +322,26 @@ export const CustomizeAntennaModal: React.FC<CustomizeAntennaModalProps> = ({
                   type="button"
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
-                  onClick={() => onChangeDbi(slotId, '0dbi')}
-                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                    currentDbi === '0dbi'
+                  onClick={() => handleSelectDbi('0dbi')}
+                  className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
+                    !is0dbiInStock
+                      ? 'border-rose-200 bg-white/70 shadow-2xs hover:border-rose-300'
+                      : currentDbi === '0dbi'
                       ? 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-500/20 shadow-xs'
                       : 'border-neutral-200 hover:border-neutral-300 bg-white'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-neutral-900">0 dBi</span>
-                    {currentDbi === '0dbi' && (
+                    <span className={`text-xs font-bold ${is0dbiInStock ? 'text-neutral-900' : 'text-neutral-500'}`}>0 dBi</span>
+                    {currentDbi === '0dbi' && is0dbiInStock && (
                       <Check className="w-3 h-3 text-emerald-600 stroke-[2.5]" />
                     )}
                   </div>
-                  <span className="text-[10px] text-neutral-500 leading-tight">{t('antennaTypes.0dbi.desc', 'Standard')}</span>
-                  <span className="text-[11px] font-mono font-bold text-emerald-700 mt-1">
-                    +₹{PRICING_CATALOG.antenna.dbi['0dbi']}
+                  <span className={`text-[10px] leading-tight ${!is0dbiInStock ? 'text-rose-600 font-bold' : 'text-neutral-500'}`}>
+                    {!is0dbiInStock ? t('common.outOfStock', 'Out of Stock') : t('antennaTypes.0dbi.desc', 'Standard')}
+                  </span>
+                  <span className={`text-[11px] font-mono font-bold mt-1 ${is0dbiInStock ? 'text-emerald-700' : 'text-neutral-400 line-through'}`}>
+                    +₹{applyPsychologicalPricing(PRICING_CATALOG.antenna.dbi['0dbi'])}
                   </span>
                 </motion.button>
 
@@ -294,22 +351,26 @@ export const CustomizeAntennaModal: React.FC<CustomizeAntennaModalProps> = ({
                   type="button"
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
-                  onClick={() => onChangeDbi(slotId, '6dbi')}
-                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                    currentDbi === '6dbi'
+                  onClick={() => handleSelectDbi('6dbi')}
+                  className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
+                    !is6dbiInStock
+                      ? 'border-rose-200 bg-white/70 shadow-2xs hover:border-rose-300'
+                      : currentDbi === '6dbi'
                       ? 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-500/20 shadow-xs'
                       : 'border-neutral-200 hover:border-neutral-300 bg-white'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-neutral-900">6 dBi</span>
-                    {currentDbi === '6dbi' && (
+                    <span className={`text-xs font-bold ${is6dbiInStock ? 'text-neutral-900' : 'text-neutral-500'}`}>6 dBi</span>
+                    {currentDbi === '6dbi' && is6dbiInStock && (
                       <Check className="w-3 h-3 text-emerald-600 stroke-[2.5]" />
                     )}
                   </div>
-                  <span className="text-[10px] text-neutral-500 leading-tight">{t('antennaTypes.6dbi.desc', 'Enhanced')}</span>
-                  <span className="text-[11px] font-mono font-bold text-emerald-700 mt-1">
-                    +₹{PRICING_CATALOG.antenna.dbi['6dbi']}
+                  <span className={`text-[10px] leading-tight ${!is6dbiInStock ? 'text-rose-600 font-bold' : 'text-neutral-500'}`}>
+                    {!is6dbiInStock ? t('common.outOfStock', 'Out of Stock') : t('antennaTypes.6dbi.desc', 'Enhanced')}
+                  </span>
+                  <span className={`text-[11px] font-mono font-bold mt-1 ${is6dbiInStock ? 'text-emerald-700' : 'text-neutral-400 line-through'}`}>
+                    +₹{applyPsychologicalPricing(PRICING_CATALOG.antenna.dbi['6dbi'])}
                   </span>
                 </motion.button>
 
@@ -319,22 +380,26 @@ export const CustomizeAntennaModal: React.FC<CustomizeAntennaModalProps> = ({
                   type="button"
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
-                  onClick={() => onChangeDbi(slotId, '12dbi')}
-                  className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                    currentDbi === '12dbi'
+                  onClick={() => handleSelectDbi('12dbi')}
+                  className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer ${
+                    !is12dbiInStock
+                      ? 'border-rose-200 bg-white/70 shadow-2xs hover:border-rose-300'
+                      : currentDbi === '12dbi'
                       ? 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-500/20 shadow-xs'
                       : 'border-neutral-200 hover:border-neutral-300 bg-white'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-neutral-900">12 dBi</span>
-                    {currentDbi === '12dbi' && (
+                    <span className={`text-xs font-bold ${is12dbiInStock ? 'text-neutral-900' : 'text-neutral-500'}`}>12 dBi</span>
+                    {currentDbi === '12dbi' && is12dbiInStock && (
                       <Check className="w-3 h-3 text-emerald-600 stroke-[2.5]" />
                     )}
                   </div>
-                  <span className="text-[10px] text-neutral-500 leading-tight">{t('antennaTypes.12dbi.desc', 'Max Range')}</span>
-                  <span className="text-[11px] font-mono font-bold text-emerald-700 mt-1">
-                    +₹{PRICING_CATALOG.antenna.dbi['12dbi']}
+                  <span className={`text-[10px] leading-tight ${!is12dbiInStock ? 'text-rose-600 font-bold' : 'text-neutral-500'}`}>
+                    {!is12dbiInStock ? t('common.outOfStock', 'Out of Stock') : t('antennaTypes.12dbi.desc', 'Max Range')}
+                  </span>
+                  <span className={`text-[11px] font-mono font-bold mt-1 ${is12dbiInStock ? 'text-emerald-700' : 'text-neutral-400 line-through'}`}>
+                    +₹{applyPsychologicalPricing(PRICING_CATALOG.antenna.dbi['12dbi'])}
                   </span>
                 </motion.button>
               </div>
