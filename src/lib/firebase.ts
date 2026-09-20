@@ -19,7 +19,7 @@ import {
   Firestore,
 } from 'firebase/firestore';
 import firebaseConfigData from '../../firebase-applet-config.json';
-import { AppliedPromo } from '../types';
+import { AppliedPromo, UpperBoxConfig, LowerSlotConfig, AntennaDbiType } from '../types';
 
 export interface ProductStockRecord {
   productId: string;
@@ -209,24 +209,6 @@ export async function testFirebaseConnection(): Promise<boolean> {
 }
 
 /**
- * Generate a cryptographic verification hash for an order to prevent tampering.
- */
-export async function generateOrderVerificationHash(
-  invoiceNumber: string,
-  itemCode: string,
-  customerCode: string,
-  payableTotal: number,
-  appliedPromoCode: string
-): Promise<string> {
-  const payload = `SBS|${invoiceNumber}|${itemCode}|${customerCode}|${payableTotal}|${appliedPromoCode}|SALT_2026_SBS_SECURE`;
-  const encoder = new TextEncoder();
-  const data = encoder.encode(payload);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-/**
  * Validates a promo code strictly against Firebase Firestore.
  */
 export async function validatePromoCodeWithFirestore(
@@ -289,89 +271,47 @@ export async function validatePromoCodeWithFirestore(
   }
 }
 
+export interface CreateOrderParams {
+  upperBoxes: UpperBoxConfig[];
+  slots: LowerSlotConfig[];
+  antennaDbiTypes: Record<number, AntennaDbiType | undefined>;
+  customerCode: string;
+  promoCode?: string;
+}
+
 /**
- * Saves a verified order record to Firestore collection `/orders/{invoiceNumber}`.
+ * Saves a verified order record by invoking the server-authoritative API endpoint /api/create-order.
+ * The server securely recalculates pricing from Firestore config/pricing, validates any promo code,
+ * signs the order with ORDER_SIGNING_SECRET, and writes to Firestore via Firebase Admin SDK.
+ * If the API fails, it throws an error and fails the order without client-side fallback.
  */
 export async function saveOrderToFirestore(
-  invoiceNumber: string,
-  itemCode: string,
-  customerCode: string,
-  itemsSubtotal: number,
-  discountAmount: number,
-  payableTotal: number,
-  appliedPromo: AppliedPromo | null
-): Promise<{ success: boolean; hash: string }> {
-  const appliedCode = appliedPromo ? appliedPromo.code : '';
-  let verificationHash = '';
+  params: CreateOrderParams
+): Promise<{ success: boolean; invoiceNumber: string; hash: string }> {
+  const res = await fetch('/api/create-order', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      upperBoxes: params.upperBoxes,
+      slots: params.slots,
+      antennaDbiTypes: params.antennaDbiTypes,
+      customerCode: params.customerCode,
+      promoCode: params.promoCode || '',
+    }),
+  });
 
-  // Attempt server-side cryptographic hash calculation via Vercel Serverless API
-  try {
-    const res = await fetch('/api/verify-order', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        invoiceNumber,
-        itemCode,
-        customerCode,
-        itemsSubtotal,
-        discountAmount,
-        payableTotal,
-        appliedPromoCode: appliedCode,
-      }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.serverHash) {
-        verificationHash = data.serverHash;
-      }
-    }
-  } catch {
-    // API endpoint unavailable in offline/local preview mode; proceed to client fallback
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok || !data?.success) {
+    const errorMessage = data?.error || `Order creation failed (${res.status})`;
+    throw new Error(errorMessage);
   }
 
-  if (!verificationHash) {
-    verificationHash = await generateOrderVerificationHash(
-      invoiceNumber,
-      itemCode,
-      customerCode,
-      payableTotal,
-      appliedCode
-    );
-  }
-
-  const orderPayload: FirestoreOrderRecord = {
-    invoiceNumber,
-    itemCode,
-    customerCode,
-    appliedPromoCode: appliedCode,
-    promoDiscount: appliedPromo
-      ? {
-          applied: true,
-          code: appliedPromo.code,
-          label: appliedPromo.label,
-          discountAmount: appliedPromo.discountAmount,
-          value: appliedPromo.value,
-          type: appliedPromo.type,
-        }
-      : {
-          applied: false,
-          discountAmount: 0,
-        },
-    itemsSubtotal,
-    discountAmount,
-    payableTotal,
-    verificationHash,
-    createdAt: new Date().toISOString(),
+  return {
+    success: true,
+    invoiceNumber: data.invoiceNumber,
+    hash: data.verificationHash,
   };
-
-  try {
-    const orderRef = doc(db, 'orders', invoiceNumber);
-    await setDoc(orderRef, orderPayload);
-    return { success: true, hash: verificationHash };
-  } catch (err) {
-    console.warn('Firestore save order notification:', err);
-    return { success: false, hash: verificationHash };
-  }
 }
 
 /**
@@ -424,19 +364,6 @@ export async function verifyOrderInFirestore(invoiceNumber: string): Promise<{
     }
 
     if (!isHashValid) {
-      const expectedHash = await generateOrderVerificationHash(
-        data.invoiceNumber,
-        data.itemCode,
-        data.customerCode,
-        data.payableTotal,
-        data.appliedPromoCode || ''
-      );
-      if (expectedHash === data.verificationHash) {
-        isHashValid = true;
-      }
-    }
-
-    if (!isHashValid) {
       return {
         exists: true,
         message: 'Security warning: Order hash verification failed (tampered).',
@@ -473,100 +400,6 @@ export async function verifyOrderInFirestore(invoiceNumber: string): Promise<{
 // Admin account seeding is no longer needed with Firebase Authentication
 export async function ensureAdminAccountSeeded(): Promise<void> {
   // Deprecated: Migrated to Firebase Authentication (email/password)
-}
-
-// --- Brute Force & Attack Protection State ---
-const BRUTE_FORCE_STORAGE_KEY = 'sbs_admin_bruteforce_meta';
-const MAX_CONSECUTIVE_ATTEMPTS = 5;
-const LOCKOUT_DURATION_SECONDS = 60;
-
-interface BruteForceMeta {
-  consecutiveFailures: number;
-  lockedUntilTimestamp: number | null;
-  lastAttemptTimestamp: number;
-}
-
-function getBruteForceMeta(): BruteForceMeta {
-  try {
-    const raw = localStorage.getItem(BRUTE_FORCE_STORAGE_KEY);
-    if (!raw) {
-      return { consecutiveFailures: 0, lockedUntilTimestamp: null, lastAttemptTimestamp: 0 };
-    }
-    const parsed = JSON.parse(raw);
-    return {
-      consecutiveFailures: Number(parsed.consecutiveFailures) || 0,
-      lockedUntilTimestamp: parsed.lockedUntilTimestamp ? Number(parsed.lockedUntilTimestamp) : null,
-      lastAttemptTimestamp: Number(parsed.lastAttemptTimestamp) || 0,
-    };
-  } catch {
-    return { consecutiveFailures: 0, lockedUntilTimestamp: null, lastAttemptTimestamp: 0 };
-  }
-}
-
-function saveBruteForceMeta(meta: BruteForceMeta): void {
-  try {
-    localStorage.setItem(BRUTE_FORCE_STORAGE_KEY, JSON.stringify(meta));
-  } catch {
-    // Ignore storage issues
-  }
-}
-
-export function checkLockoutStatus(): { isLocked: boolean; remainingSeconds: number; attemptsCount: number } {
-  const meta = getBruteForceMeta();
-  const now = Date.now();
-
-  if (meta.lockedUntilTimestamp && meta.lockedUntilTimestamp > now) {
-    const remaining = Math.ceil((meta.lockedUntilTimestamp - now) / 1000);
-    return { isLocked: true, remainingSeconds: remaining, attemptsCount: meta.consecutiveFailures };
-  }
-
-  // If lockout expired, reset
-  if (meta.lockedUntilTimestamp && meta.lockedUntilTimestamp <= now) {
-    saveBruteForceMeta({
-      consecutiveFailures: 0,
-      lockedUntilTimestamp: null,
-      lastAttemptTimestamp: now,
-    });
-    return { isLocked: false, remainingSeconds: 0, attemptsCount: 0 };
-  }
-
-  return { isLocked: false, remainingSeconds: 0, attemptsCount: meta.consecutiveFailures };
-}
-
-function recordFailedAttempt(): { isNowLocked: boolean; remainingSeconds: number; remainingAttempts: number } {
-  const meta = getBruteForceMeta();
-  const now = Date.now();
-  const newFailures = meta.consecutiveFailures + 1;
-
-  if (newFailures >= MAX_CONSECUTIVE_ATTEMPTS) {
-    const lockUntil = now + LOCKOUT_DURATION_SECONDS * 1000;
-    saveBruteForceMeta({
-      consecutiveFailures: newFailures,
-      lockedUntilTimestamp: lockUntil,
-      lastAttemptTimestamp: now,
-    });
-    return { isNowLocked: true, remainingSeconds: LOCKOUT_DURATION_SECONDS, remainingAttempts: 0 };
-  }
-
-  saveBruteForceMeta({
-    consecutiveFailures: newFailures,
-    lockedUntilTimestamp: null,
-    lastAttemptTimestamp: now,
-  });
-
-  return {
-    isNowLocked: false,
-    remainingSeconds: 0,
-    remainingAttempts: MAX_CONSECUTIVE_ATTEMPTS - newFailures,
-  };
-}
-
-function resetFailedAttempts(): void {
-  saveBruteForceMeta({
-    consecutiveFailures: 0,
-    lockedUntilTimestamp: null,
-    lastAttemptTimestamp: Date.now(),
-  });
 }
 
 /**
@@ -635,48 +468,31 @@ export function sanitizeAndValidateAccount(rawInput: string): { valid: boolean; 
  * Authenticates admin via official Firebase Authentication (email and password).
  */
 export async function loginAdminWithFirebase(
-  rawAccountOrEmail: string,
+  email: string,
   rawPassword: string
 ): Promise<{
   success: boolean;
   username?: string;
   role?: string;
   error?: string;
-  remainingAttempts?: number;
-  lockoutSeconds?: number;
 }> {
-  // 1. Check Brute Force Lockout
-  const lockout = checkLockoutStatus();
-  if (lockout.isLocked) {
-    return {
-      success: false,
-      error: `Too many failed attempts. Account login is temporarily locked for security. Please try again in ${lockout.remainingSeconds}s.`,
-      lockoutSeconds: lockout.remainingSeconds,
-    };
-  }
-
-  const cleanInput = (rawAccountOrEmail || '').trim();
-  if (!cleanInput) {
-    return { success: false, error: 'Email or admin username is required.' };
+  const cleanEmail = (email || '').trim();
+  if (!cleanEmail) {
+    return { success: false, error: 'Admin email is required.' };
   }
   if (!rawPassword) {
     return { success: false, error: 'Password is required.' };
   }
 
-  // Support both full email address and username prefix
-  const emailToUse = cleanInput.includes('@') ? cleanInput : `${cleanInput.toLowerCase()}@speedabraker.com`;
-
   try {
-    const userCredential = await signInWithEmailAndPassword(auth, emailToUse, rawPassword);
-    resetFailedAttempts();
+    const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, rawPassword);
     return {
       success: true,
-      username: userCredential.user.email || userCredential.user.displayName || cleanInput,
+      username: userCredential.user.email || userCredential.user.displayName || cleanEmail,
       role: 'admin',
     };
   } catch (err: unknown) {
     console.warn('Firebase Auth login attempt result:', err);
-    const failResult = recordFailedAttempt();
     let message = 'Invalid admin credentials.';
     const firebaseErr = err as { code?: string; message?: string };
     if (
@@ -687,22 +503,15 @@ export async function loginAdminWithFirebase(
       message = 'Invalid email or password.';
     } else if (firebaseErr?.code === 'auth/too-many-requests') {
       message = 'Too many failed attempts. Firebase has temporarily blocked requests.';
+    } else if (firebaseErr?.code === 'auth/invalid-email') {
+      message = 'Please enter a valid email address.';
     } else if (firebaseErr?.message) {
       message = firebaseErr.message;
     }
 
-    if (failResult.isNowLocked) {
-      return {
-        success: false,
-        error: `Security Lock: Maximum failed attempts reached. Login locked for ${LOCKOUT_DURATION_SECONDS} seconds.`,
-        lockoutSeconds: LOCKOUT_DURATION_SECONDS,
-      };
-    }
-
     return {
       success: false,
-      error: `${message} ${failResult.remainingAttempts} attempt(s) remaining before temporary lockout.`,
-      remainingAttempts: failResult.remainingAttempts,
+      error: message,
     };
   }
 }
@@ -711,17 +520,15 @@ export async function loginAdminWithFirebase(
  * Proxy for backward compatibility with existing components
  */
 export async function verifyAdminCredentials(
-  rawAccount: string,
+  email: string,
   rawPassword: string
 ): Promise<{
   success: boolean;
   username?: string;
   role?: string;
   error?: string;
-  remainingAttempts?: number;
-  lockoutSeconds?: number;
 }> {
-  return loginAdminWithFirebase(rawAccount, rawPassword);
+  return loginAdminWithFirebase(email, rawPassword);
 }
 
 /**

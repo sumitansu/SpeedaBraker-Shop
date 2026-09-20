@@ -10,16 +10,10 @@ import {
   AlertTriangle,
   Loader2,
   LogOut,
-  ShieldAlert,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import {
-  loginAdminWithFirebase,
-  verifyAdminCredentials,
-  checkLockoutStatus,
-  sanitizeAndValidateAccount,
-} from '../../lib/firebase';
+import { loginAdminWithFirebase } from '../../lib/firebase';
 
 interface AdminLoginModalProps {
   isOpen: boolean;
@@ -39,60 +33,41 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
   onLogout,
 }) => {
   const { t } = useTranslation();
-  const [account, setAccount] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [justLoggedIn, setJustLoggedIn] = useState(false);
-  const [lockoutCountdown, setLockoutCountdown] = useState<number>(0);
 
-  const accountInputRef = useRef<HTMLInputElement>(null);
+  const emailInputRef = useRef<HTMLInputElement>(null);
 
-  // Focus input and check initial lockout on open
+  // Focus input on open
   useEffect(() => {
     if (isOpen) {
       setErrorMsg(null);
       setJustLoggedIn(false);
-
-      const status = checkLockoutStatus();
-      if (status.isLocked) {
-        setLockoutCountdown(status.remainingSeconds);
-      } else {
-        setLockoutCountdown(0);
-        if (!isLoggedIn) {
-          setTimeout(() => accountInputRef.current?.focus(), 100);
-        }
+      if (!isLoggedIn) {
+        setTimeout(() => emailInputRef.current?.focus(), 100);
       }
     }
   }, [isOpen, isLoggedIn]);
 
-  // Lockout countdown timer
-  useEffect(() => {
-    if (lockoutCountdown <= 0) return;
-    const interval = setInterval(() => {
-      setLockoutCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          setErrorMsg(null);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [lockoutCountdown]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLoading || lockoutCountdown > 0) return;
+    if (isLoading) return;
 
     setErrorMsg(null);
 
-    // Client-side quick injection check
-    const validation = sanitizeAndValidateAccount(account);
-    if (!validation.valid) {
-      setErrorMsg(validation.error || 'Invalid account name format.');
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      setErrorMsg('Please enter your admin email address.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setErrorMsg('Please enter a valid email address.');
       return;
     }
 
@@ -104,7 +79,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
     setIsLoading(true);
 
     try {
-      const result = await loginAdminWithFirebase(account, password);
+      const result = await loginAdminWithFirebase(cleanEmail, password);
 
       if (result.success && result.username) {
         setJustLoggedIn(true);
@@ -113,9 +88,6 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
         setErrorMsg(null);
       } else {
         setErrorMsg(result.error || 'Authentication failed. Access denied.');
-        if (result.lockoutSeconds && result.lockoutSeconds > 0) {
-          setLockoutCountdown(result.lockoutSeconds);
-        }
       }
     } catch (err) {
       console.error('Login error:', err);
@@ -127,7 +99,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
 
   const handleLogoutClick = () => {
     onLogout();
-    setAccount('');
+    setEmail('');
     setPassword('');
     setJustLoggedIn(false);
     setErrorMsg(null);
@@ -218,7 +190,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                     </span>
                     <h3 className="text-lg font-bold text-neutral-900">
                       {t('modals.adminLogin.loggedInAs', 'Logged in as')}{' '}
-                      <span className="text-emerald-700">{currentAdminUser || account || 'Admin'}</span>
+                      <span className="text-emerald-700">{currentAdminUser || email || 'Admin'}</span>
                     </h3>
                     <p className="text-xs text-neutral-500 max-w-xs mx-auto">
                       {t(
@@ -255,7 +227,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
               ) : (
                 /* Login Form */
                 <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
-                  {/* Error or Lockout Alert */}
+                  {/* Error Alert */}
                   {errorMsg && (
                     <motion.div
                       id="admin-login-error"
@@ -269,49 +241,34 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                     </motion.div>
                   )}
 
-                  {lockoutCountdown > 0 && (
-                    <motion.div
-                      id="admin-login-lockout-banner"
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-800 font-medium"
-                    >
-                      <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
-                      <div>
-                        {t('modals.adminLogin.rateLimit', 'Rate Limit Lock: Try again in')}{' '}
-                        <span className="font-bold text-amber-900">{lockoutCountdown}s</span>
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {/* Account / Username Field */}
+                  {/* Email Field */}
                   <div className="space-y-1.5">
                     <label
-                      htmlFor="admin-account-input"
+                      htmlFor="admin-email-input"
                       className="block text-xs font-semibold text-neutral-700"
                     >
-                      {t('modals.adminLogin.account', 'Admin Email / Username')}
+                      {t('modals.adminLogin.account', 'Admin Email')}
                     </label>
                     <div className="relative group">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400 group-focus-within:text-neutral-900 transition-colors">
                         <User className="w-4 h-4" />
                       </div>
                       <input
-                        id="admin-account-input"
-                        name="admin_acc_field"
-                        ref={accountInputRef}
-                        type="text"
-                        value={account}
-                        onChange={(e) => setAccount(e.target.value)}
-                        placeholder={t('modals.adminLogin.accountPlaceholder', 'admin@example.com or admin')}
-                        autoComplete="username"
+                        id="admin-email-input"
+                        name="admin_email_field"
+                        ref={emailInputRef}
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder={t('modals.adminLogin.emailPlaceholder', 'admin@example.com')}
+                        autoComplete="email"
                         autoCorrect="off"
                         autoCapitalize="none"
                         spellCheck="false"
                         data-lpignore="true"
                         data-form-type="other"
-                        disabled={isLoading || lockoutCountdown > 0}
-                        maxLength={64}
+                        disabled={isLoading}
+                        maxLength={96}
                         className="w-full pl-9 pr-3 py-2 text-sm bg-neutral-50/70 hover:bg-neutral-50 focus:bg-white border border-neutral-300 rounded-xl text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900/15 focus:border-neutral-900 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                       />
                     </div>
@@ -342,7 +299,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                         spellCheck="false"
                         data-lpignore="true"
                         data-form-type="other"
-                        disabled={isLoading || lockoutCountdown > 0}
+                        disabled={isLoading}
                         maxLength={128}
                         className="w-full pl-9 pr-10 py-2 text-sm bg-neutral-50/70 hover:bg-neutral-50 focus:bg-white border border-neutral-300 rounded-xl text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900/15 focus:border-neutral-900 transition-all disabled:opacity-60 disabled:cursor-not-allowed font-sans"
                       />
@@ -391,16 +348,16 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                     id="btn-submit-admin-login"
                     type="submit"
                     whileHover={
-                      !isLoading && lockoutCountdown === 0 && account.trim() && password
+                      !isLoading && email.trim() && password
                         ? { scale: 1.02 }
                         : undefined
                     }
                     whileTap={
-                      !isLoading && lockoutCountdown === 0 && account.trim() && password
+                      !isLoading && email.trim() && password
                         ? { scale: 0.98 }
                         : undefined
                     }
-                    disabled={isLoading || lockoutCountdown > 0 || !account.trim() || !password}
+                    disabled={isLoading || !email.trim() || !password}
                     className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 px-4 bg-neutral-900 hover:bg-black active:bg-neutral-950 text-white text-sm font-semibold rounded-xl transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                   >
                     {isLoading ? (

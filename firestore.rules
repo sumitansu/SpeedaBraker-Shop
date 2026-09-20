@@ -12,13 +12,10 @@ service cloud.firestore {
     }
 
     // Administrator authorization check.
-    // To restrict to your specific Firebase Auth UID, replace '<REPLACE_WITH_YOUR_FIREBASE_ADMIN_UID>'
-    // with your Admin User UID copied from Firebase Authentication Console.
     function isAdmin() {
       return request.auth != null && (
-        request.auth.uid == '<REPLACE_WITH_YOUR_FIREBASE_ADMIN_UID>' ||
-        request.auth.token.admin == true ||
-        request.auth != null
+        request.auth.uid == 'REPLACE_WITH_ADMIN_UID' ||
+        request.auth.token.admin == true
       );
     }
 
@@ -63,11 +60,11 @@ service cloud.firestore {
     }
 
     // Promo Codes Collection:
-    // Customers can validate promo codes (get/list).
-    // Modifying, creating, or deleting promo codes is restricted exclusively to Admins.
+    // Customers can validate individual promo codes via get by codeId.
+    // Listing, modifying, creating, or deleting promo codes is restricted exclusively to Admins.
     match /promo_codes/{codeId} {
       allow get: if isValidId(codeId);
-      allow list: if true;
+      allow list: if isAdmin();
       allow create, update: if isAdmin() && isValidId(codeId) && isValidPromo(request.resource.data);
       allow delete: if isAdmin() && isValidId(codeId);
     }
@@ -75,13 +72,11 @@ service cloud.firestore {
     // Orders Collection:
     // Anyone can verify a specific order by its exact invoice ID.
     // Admins can list orders.
-    // Orders can be registered once, and are completely immutable afterwards.
+    // Client order creation is strictly disabled; orders are created exclusively via /api/create-order Admin SDK.
     match /orders/{invoiceId} {
       allow get: if isValidId(invoiceId);
       allow list: if isAdmin();
-      allow create: if isValidId(invoiceId) &&
-                       request.resource.data.invoiceNumber == invoiceId &&
-                       isValidOrder(request.resource.data);
+      allow create: if false;
       allow update, delete: if false;
     }
 

@@ -554,6 +554,21 @@ export const BillCanvas: React.FC<BillCanvasProps> = ({
 
         {/* In-Bill Action Button (Place Order -> Download .sbs when registered) */}
         <div className="mt-4 pt-3 border-t border-neutral-100 flex flex-col items-center gap-1.5 print:hidden">
+          {/* Order Placement / Verification Error Alert */}
+          {dbVerificationStatus?.checked && !dbVerificationStatus.verified && (
+            <motion.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="w-full mb-2 p-2.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2"
+            >
+              <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <div className="flex-1 text-left">
+                <span className="font-semibold block text-[11px] text-red-800">Order Registration Failed</span>
+                <span className="text-[10px] text-red-700">{dbVerificationStatus.message}</span>
+              </div>
+            </motion.div>
+          )}
+
           {isRegistered ? (
             <motion.button
               id="btn-download-sbs"

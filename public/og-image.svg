@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#09090b" />
+      <stop offset="100%" stop-color="#18181b" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)" />
+  
+  <!-- Subtle Grid Pattern -->
+  <g opacity="0.12" stroke="#ffffff" stroke-width="1">
+    <path d="M0 70 H1200 M0 140 H1200 M0 210 H1200 M0 280 H1200 M0 350 H1200 M0 420 H1200 M0 490 H1200 M0 560 H1200" />
+    <path d="M100 0 V630 M200 0 V630 M300 0 V630 M400 0 V630 M500 0 V630 M600 0 V630 M700 0 V630 M800 0 V630 M900 0 V630 M1000 0 V630 M1100 0 V630" />
+  </g>
+
+  <!-- Hardware Chip / Icon -->
+  <g transform="translate(100, 150)">
+    <rect width="90" height="90" rx="20" fill="#27272a" stroke="#3f3f46" stroke-width="2" />
+    <rect x="25" y="25" width="40" height="40" rx="8" fill="url(#accent)" />
+    <circle cx="45" cy="45" r="10" fill="#09090b" />
+  </g>
+
+  <!-- Badge / Eyebrow -->
+  <g transform="translate(220, 168)">
+    <rect width="210" height="34" rx="17" fill="#27272a" stroke="#3f3f46" stroke-width="1.5" />
+    <text x="105" y="22" fill="#34d399" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="700" text-anchor="middle" letter-spacing="1.5">IOT HARDWARE SUITE</text>
+  </g>
+
+  <!-- Title -->
+  <text x="100" y="320" fill="#f4f4f5" font-family="system-ui, -apple-system, sans-serif" font-size="56" font-weight="800" letter-spacing="-1">Speedabraker's Shop</text>
+  
+  <!-- Subtitle -->
+  <text x="100" y="380" fill="#a1a1aa" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="400">Custom IoT Hardware Configurator &amp; Itemized Billing Engine</text>
+
+  <!-- Feature Pills -->
+  <g transform="translate(100, 460)">
+    <!-- Pill 1 -->
+    <rect x="0" y="0" width="220" height="46" rx="23" fill="#18181b" stroke="#3f3f46" stroke-width="1" />
+    <circle cx="24" cy="23" r="6" fill="#10b981" />
+    <text x="42" y="29" fill="#e4e4e7" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="600">Hardware Config</text>
+    
+    <!-- Pill 2 -->
+    <rect x="240" y="0" width="230" height="46" rx="23" fill="#18181b" stroke="#3f3f46" stroke-width="1" />
+    <circle cx="264" cy="23" r="6" fill="#06b6d4" />
+    <text x="282" y="29" fill="#e4e4e7" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="600">Cryptographic Bills</text>
+
+    <!-- Pill 3 -->
+    <rect x="490" y="0" width="230" height="46" rx="23" fill="#18181b" stroke="#3f3f46" stroke-width="1" />
+    <circle cx="514" cy="23" r="6" fill="#8b5cf6" />
+    <text x="532" y="29" fill="#e4e4e7" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="600">Order Verification</text>
+  </g>
+
+  <!-- URL watermark -->
+  <text x="1100" y="580" fill="#71717a" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="500" text-anchor="end">speedabraker-shop.vercel.app</text>
+</svg>

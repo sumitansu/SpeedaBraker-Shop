@@ -28,23 +28,49 @@ import {
 import { Header } from './components/Header';
 import { TopStatusGrid } from './components/TopStatusGrid';
 import { BillCanvas } from './components/BillCanvas';
-import { ConfirmResetModal } from './components/modals/ConfirmResetModal';
-
 const AdminCanvas = React.lazy(() =>
   import('./components/AdminCanvas').then((m) => ({ default: m.AdminCanvas }))
 );
-import { AntennaInfoModal } from './components/modals/AntennaInfoModal';
-import { WirelessWarningModal } from './components/modals/WirelessWarningModal';
-import { OneAntennaWarningModal } from './components/modals/OneAntennaWarningModal';
-import { JumpQuestionModal } from './components/modals/JumpQuestionModal';
-import { V1AntennaLimitModal } from './components/modals/V1AntennaLimitModal';
-import { V1DowngradeAntennaModal } from './components/modals/V1DowngradeAntennaModal';
-import { AddUnconfiguredAntennaModal } from './components/modals/AddUnconfiguredAntennaModal';
-import { AddAndConfigureAntennaModal } from './components/modals/AddAndConfigureAntennaModal';
-import { CustomizeAntennaModal } from './components/modals/CustomizeAntennaModal';
-import { ImportModal } from './components/modals/ImportModal';
-import { AdminLoginModal } from './components/modals/AdminLoginModal';
-import { OutOfStockModal, OutOfStockModalData } from './components/modals/OutOfStockModal';
+const AdminLoginModal = React.lazy(() =>
+  import('./components/modals/AdminLoginModal').then((m) => ({ default: m.AdminLoginModal }))
+);
+const ImportModal = React.lazy(() =>
+  import('./components/modals/ImportModal').then((m) => ({ default: m.ImportModal }))
+);
+const ConfirmResetModal = React.lazy(() =>
+  import('./components/modals/ConfirmResetModal').then((m) => ({ default: m.ConfirmResetModal }))
+);
+const AntennaInfoModal = React.lazy(() =>
+  import('./components/modals/AntennaInfoModal').then((m) => ({ default: m.AntennaInfoModal }))
+);
+const WirelessWarningModal = React.lazy(() =>
+  import('./components/modals/WirelessWarningModal').then((m) => ({ default: m.WirelessWarningModal }))
+);
+const OneAntennaWarningModal = React.lazy(() =>
+  import('./components/modals/OneAntennaWarningModal').then((m) => ({ default: m.OneAntennaWarningModal }))
+);
+const JumpQuestionModal = React.lazy(() =>
+  import('./components/modals/JumpQuestionModal').then((m) => ({ default: m.JumpQuestionModal }))
+);
+const V1AntennaLimitModal = React.lazy(() =>
+  import('./components/modals/V1AntennaLimitModal').then((m) => ({ default: m.V1AntennaLimitModal }))
+);
+const V1DowngradeAntennaModal = React.lazy(() =>
+  import('./components/modals/V1DowngradeAntennaModal').then((m) => ({ default: m.V1DowngradeAntennaModal }))
+);
+const AddUnconfiguredAntennaModal = React.lazy(() =>
+  import('./components/modals/AddUnconfiguredAntennaModal').then((m) => ({ default: m.AddUnconfiguredAntennaModal }))
+);
+const AddAndConfigureAntennaModal = React.lazy(() =>
+  import('./components/modals/AddAndConfigureAntennaModal').then((m) => ({ default: m.AddAndConfigureAntennaModal }))
+);
+const CustomizeAntennaModal = React.lazy(() =>
+  import('./components/modals/CustomizeAntennaModal').then((m) => ({ default: m.CustomizeAntennaModal }))
+);
+const OutOfStockModal = React.lazy(() =>
+  import('./components/modals/OutOfStockModal').then((m) => ({ default: m.OutOfStockModal }))
+);
+import type { OutOfStockModalData } from './components/modals/OutOfStockModal';
 
 import { FirmwareStep } from './components/steps/FirmwareStep';
 import { DisplayStep } from './components/steps/DisplayStep';
@@ -678,36 +704,38 @@ export default function App() {
     downloadSbsFile(invoiceNumber, orderDetails);
   };
 
-  // Bottom action button: Places order, registers invoice and its details in Firebase Firestore
+  // Bottom action button: Places order, registers invoice and its details via /api/create-order
   const handlePlaceOrder = async () => {
     setIsPlacingOrder(true);
     try {
-      const rawGrandTotal =
-        calculateRawTotalPrice(upperBoxes, slots, antennaDbiTypes) +
-        PRICING_CATALOG.mandatoryModules;
-      const grandTotal = applyPsychologicalPricing(rawGrandTotal);
-      const { discountAmount, finalTotal } = calculateDiscount(grandTotal, appliedPromo);
-      const itemCode = generateBoughtItemCode(upperBoxes, slots, antennaDbiTypes);
-
-      // Save order record to Firebase Firestore
-      await saveOrderToFirestore(
-        invoiceNumber,
-        itemCode,
+      // Call serverless order creation API without client-side prices
+      const result = await saveOrderToFirestore({
+        upperBoxes,
+        slots,
+        antennaDbiTypes,
         customerCode,
-        grandTotal,
-        discountAmount,
-        finalTotal,
-        appliedPromo
-      );
+        promoCode: appliedPromo?.code || '',
+      });
 
-      setPlacedInvoices((prev) => new Set(prev).add(invoiceNumber));
+      if (!result.success) {
+        throw new Error('Order creation failed.');
+      }
+
+      const confirmedInvoice = result.invoiceNumber || invoiceNumber;
+      setPlacedInvoices((prev) => new Set(prev).add(confirmedInvoice));
       setDbVerificationStatus({
         checked: true,
         verified: true,
         message: 'Verified authentic database order',
       });
-    } catch (err) {
-      console.error('Failed to register order in Firestore:', err);
+    } catch (err: any) {
+      console.error('Failed to register order via /api/create-order:', err);
+      const errorMessage = err?.message || 'Failed to register order: API error occurred.';
+      setDbVerificationStatus({
+        checked: true,
+        verified: false,
+        message: errorMessage,
+      });
     } finally {
       setIsPlacingOrder(false);
     }
@@ -886,18 +914,23 @@ export default function App() {
       />
 
       {/* Admin Login Modal */}
-      <AdminLoginModal
-        isOpen={showLoginModal}
-        onClose={() => setShowLoginModal(false)}
-        isLoggedIn={isAdminLoggedIn}
-        currentAdminUser={currentAdminUser}
-        onLoginSuccess={handleAdminLoginSuccess}
-        onLogout={handleAdminLogout}
-      />
+      {showLoginModal && (
+        <React.Suspense fallback={null}>
+          <AdminLoginModal
+            isOpen={showLoginModal}
+            onClose={() => setShowLoginModal(false)}
+            isLoggedIn={isAdminLoggedIn}
+            currentAdminUser={currentAdminUser}
+            onLoginSuccess={handleAdminLoginSuccess}
+            onLogout={handleAdminLogout}
+          />
+        </React.Suspense>
+      )}
 
       {/* Modals with AnimatePresence for exit closing animations */}
-      <AnimatePresence>
-        {/* Import Configuration / Invoice Modal */}
+      <React.Suspense fallback={null}>
+        <AnimatePresence>
+          {/* Import Configuration / Invoice Modal */}
         {showImportModal && (
           <ImportModal
             key="import-modal"
@@ -1081,7 +1114,8 @@ export default function App() {
             onSelectStep={(stepId) => goToStep(stepId)}
           />
         )}
-      </AnimatePresence>
+        </AnimatePresence>
+      </React.Suspense>
 
       {/* Main Canvas Area */}
       <main id="main-canvas" className="flex-1 flex flex-col w-full min-h-0 overflow-hidden relative">
