@@ -726,7 +726,7 @@ export default function App() {
       setDbVerificationStatus({
         checked: true,
         verified: true,
-        message: 'Verified authentic database order',
+        message: 'Verified authentic order',
       });
     } catch (err: any) {
       console.error('Failed to register order via /api/create-order:', err);
@@ -810,7 +810,7 @@ export default function App() {
             setDbVerificationStatus({
               checked: true,
               verified: true,
-              message: 'Verified authentic database order',
+              message: 'Verified authentic order',
             });
           } else {
             // Unregistered or spoofed/tampered
@@ -819,8 +819,8 @@ export default function App() {
               checked: true,
               verified: false,
               message: verification.exists
-                ? 'Order tampered: Database verification failed'
-                : 'Unregistered invoice: No database promo discount authorized',
+                ? 'This invoice could not be verified.'
+                : 'Unregistered invoice: promo discount not applied.',
             });
           }
         } else {

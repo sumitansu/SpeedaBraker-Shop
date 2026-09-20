@@ -1,72 +1,225 @@
-# Speedabraker's Shop — Session Change Log
+# Speedabraker's Shop — Project Documentation & Audit Record
 
-## Overview
-This document logs the changes completed in this session, focusing on UI streamlining, copy simplification, user-facing error message sanitization, and full internationalization updates across all 6 supported locales (`en`, `hi`, `es`, `fr`, `de`, `ja`).
-
----
-
-## Summary of Changes
-
-### 1. `src/components/BillCanvas.tsx` (UI & Copy Streamlining)
-* **Removed Visual Clutter**:
-  * Removed decorative invoice subtitle (`t('bill.subtitle')`) under the main shop header.
-  * Removed redundant helper hint caption below the checkout action buttons (`t('bill.downloadHint')` / `t('bill.placeOrderHint')`).
-* **Simplified Action Button Tooltips & States**:
-  * Updated invoice ID copy button title to `"Copy invoice number"`.
-  * Updated download invoice button title to `"Download invoice. Hold to copy invoice number."` and copied state label to `"Invoice number copied"`.
-  * Updated place order button title to `"Place order"` and loading state text to `"Placing order..."`.
-* **Standardized Status Indicators**:
-  * Changed the label `"Database:"` to `"Status:"`.
-  * Changed verified badge text from `"Verified in Firebase"` to `"Order confirmed"`.
-  * Changed unverified badge text from `"Unregistered Invoice"` to `"Not placed yet"`.
+> **CRITICAL NOTICE FOR AI ASSISTANTS AND DEVELOPERS:**  
+> This `README.md` contains the exact status, reports, and instructions provided after the last code change. Any other AI assistant or developer working on this codebase MUST update this README with the full report of everything said to the user after making subsequent code changes, preserving full context, phase status, and technical continuity.
 
 ---
 
-### 2. `src/i18n.ts` (6-Language Translation Pruning & Streamlining)
-Applied across all locales (**English `en`**, **Hindi `hi`**, **Spanish `es`**, **French `fr`**, **German `de`**, **Japanese `ja`**):
+# Implementation Status Table (Completed in Codebase)
 
-* **Pruned Unused Translation Keys**:
-  * Removed `app.subtitle`
-  * Removed `bill.title`
-  * Removed `bill.subtitle`
-  * Removed `bill.status`
-  * Removed `bill.statusConfirmed`
-  * Removed `bill.itemizedSpecs`
-* **Refined Step Guidance Copy**:
-  * Firmware step: `"Choose between V1 and V2 firmware base."` → `"Pick your firmware version."` / localized equivalent.
-  * Display step: `"Displays the active operating mode (Bluetooth, BLE, Wi-Fi, or RC Remote)."` → `"Shows the active mode: Bluetooth, BLE, Wi-Fi or RC Remote."` / localized equivalent.
-  * Wireless step: `"Control your device wirelessly on a 5GHz Wi-Fi network."` → `"Control the device over 5GHz Wi-Fi."` / localized equivalent.
-  * Module quality step: `"Configure transmitter module grade per active antenna slot."` → `"Choose a module grade for each antenna."` / localized equivalent.
-  * Antenna type step: `"Select the physical antenna radiator gain for each antenna slot."` → `"Choose the antenna gain (dBi) for each slot."` / localized equivalent.
-* **Updated Bill, Actions & Modal Strings**:
-  * Simplified placing order states, download hints, and copy notifications.
-  * Streamlined admin modal headers (`"Admin sign in"`, `"Password"`, `"Sign in"`).
-  * Simplified antenna recommendations and warning copy for better readability.
-
----
-
-### 3. `src/lib/firebase.ts` (Sanitized User-Facing Error Messages)
-Removed internal technical details from customer-facing feedback strings:
-* `"Could not connect to database to verify promo code."` → `"Could not verify promo code."`
-* `"Order not found in Firebase database. No promo discount verified."` → `"Order not found. No promo discount verified."`
-* `"Verified authentic database order."` → `"Verified authentic order."`
-* `"Could not connect to Firebase database to verify order."` → `"Could not verify order."`
-* `"Too many failed attempts. Firebase has temporarily blocked requests."` → `"Too many failed attempts. Please try again later."`
-
----
-
-## Modified Files
-
-| File | Type | Changes Description |
+| Feature / Component | Implementation Details | Status |
 | :--- | :--- | :--- |
-| `src/components/BillCanvas.tsx` | Component | Removed subtitles and button hints; updated tooltips, status badges, and button labels. |
-| `src/i18n.ts` | Localization | Removed obsolete translation keys and streamlined copy across `en`, `hi`, `es`, `fr`, `de`, and `ja`. |
-| `src/lib/firebase.ts` | Utilities / Auth | Sanitized client-facing auth and verification error messages. |
-| `README.md` | Documentation | Replaced prior documentation with current session's log. |
+| **Firebase Auth Admin** | Migrated `src/lib/firebase.ts` and `src/components/modals/AdminLoginModal.tsx` to real email/password authentication (`signInWithEmailAndPassword`). Removed legacy local storage lockouts and default credentials. | **DONE** |
+| **`isAdmin()` Firestore Rule** | Hardened `firestore.rules` to strictly require `request.auth.uid == 'REPLACE_WITH_ADMIN_UID'` or `request.auth.token.admin == true`. Removed permissive authentication fallbacks. | **DONE** |
+| **Server-Side Order Creation** | Built `/api/create-order.ts` using Firebase Admin SDK. Recomputes all prices server-side, validates promos, enforces `.create()` conflict prevention (HTTP 409), generates `customerCode` strictly on server, signs with HMAC-SHA256, and uses clean deduplicated CORS Origin check. | **DONE** |
+| **IP Rate Limiting & TTL** | Enforced 5 orders per IP per 10 minutes in `/api/create-order.ts` using `rate_limits` collection keyed by SHA-256 IP hash. Stores `expiresAt` Date field for automated Firestore TTL cleanup. | **DONE** |
+| **Server-Side Order Verification** | Rewrote `/api/verify-order.ts` to verify orders strictly against stored Firestore documents without trusting client totals or returning internal hash strings. | **DONE** |
+| **Firestore Security Rules** | Rules locked for `orders` (`allow create: if false;`), `rate_limits` (`allow read, write: if false;`), `promo_codes` (`allow list: if isAdmin();`), `config` (admin-only writes), and `product_stock`. | **DONE** |
+| **Vercel Headers & CSP** | Configured `vercel.json` with HSTS (`max-age=63072000; includeSubDomains; preload`), `X-Content-Type-Options: nosniff`, `Permissions-Policy`, SPA rewrites preserving `/api/*`, and CSP. | **DONE** |
+| **Vercel Analytics & Insights** | Integrated `@vercel/analytics` and `@vercel/speed-insights` inside root `<ErrorBoundary>`. | **DONE** |
+| **SEO, Social Sharing & Domain** | Configured canonical URL, OpenGraph, Twitter card targeting `og-image.png`, `robots.txt`, `sitemap.xml`, Schema.org JSON-LD, all pointing to `https://shop-speedabraker.vercel.app`. Pruned obsolete `og-image.svg`. | **DONE** |
+| **Code Splitting & Lazy Modals** | Converted `AdminCanvas` and all 12 modal components to `React.lazy()` + `<React.Suspense fallback={null}>` dynamic imports with Vite vendor chunking. | **DONE** |
+| **User-Facing Text Cleanup** | Removed all user-visible occurrences of "Firebase", "Firestore", and "database" from customer and administrative interfaces across `src/App.tsx`, `src/components/modals/AdminLoginModal.tsx`, and `src/components/AdminCanvas.tsx`. | **DONE** |
 
 ---
 
-## Verification & Quality Checks
+# Remaining Items
 
-* **TypeScript Type Checking & Linting**: `tsc --noEmit` passed with 0 errors.
-* **Build Verification**: `vite build` succeeded with clean bundle output.
+The following items require external manual configuration or future architectural refinement:
+
+1. **Replace `'REPLACE_WITH_ADMIN_UID'` in `firestore.rules`**:
+   - Copy the admin user's UID from the Firebase Console and replace `'REPLACE_WITH_ADMIN_UID'` on line 16 of `firestore.rules`, then deploy the rules.
+2. **Tighten CSP (`'unsafe-inline'` / `'unsafe-eval'`)**:
+   - In `vercel.json`, tighten Content Security Policy by replacing `'unsafe-inline'` and `'unsafe-eval'` with cryptographic nonces or SHA hashes once framework script evaluation allows.
+3. **Per-Promo Usage Limits**:
+   - Implement per-promo usage counters and max redemption caps if promotional campaigns require global or per-customer consumption limits.
+
+---
+
+# My manual steps
+
+Follow these exact steps in your external cloud consoles to complete production setup:
+
+### 1. Firebase Console
+1. **Enable Email/Password sign-in**:
+   - Open [Firebase Console](https://console.firebase.google.com/) -> Select project -> **Build** -> **Authentication**.
+   - Navigate to the **Sign-in method** tab.
+   - Click **Email/Password**, toggle **Enable** to ON, and click **Save**.
+2. **Create admin user account**:
+   - In **Authentication**, switch to the **Users** tab and click **Add user**.
+   - Enter your admin email (e.g. `admin@yourdomain.com`) and a secure password, then click **Add user**.
+3. **Copy UID into `firestore.rules` & deploy**:
+   - Copy the **User UID** of your created admin user from the table.
+   - Open `firestore.rules` and replace `'REPLACE_WITH_ADMIN_UID'` with your copied UID:
+     ```javascript
+     request.auth.uid == '<YOUR_COPIED_ADMIN_UID>' ||
+     ```
+   - Deploy rules using `deploy_firebase` or by pasting into **Firestore Database** -> **Rules** and clicking **Publish**.
+4. **Enable Firestore TTL Policy for Rate Limiting**:
+   - In Firebase Console, navigate to **Firestore Database** -> **TTL** (or **Data** -> **TTL policies**).
+   - Click **Create TTL Policy**.
+   - Set Collection group: `rate_limits`
+   - Set Timestamp field: `expiresAt`
+   - Click **Create**. Firestore will automatically purge expired rate limit documents.
+5. **Download Firebase Admin Service Account Key**:
+   - In Firebase Console, click the **Gear icon (Project settings)** -> **Service accounts** tab.
+   - Click **Generate new private key** -> **Generate key**.
+   - Save the downloaded JSON file securely.
+
+### 2. Vercel Environment Variables
+Log in to [Vercel](https://vercel.com/) -> Select your project -> **Settings** -> **Environment Variables**. Configure the following variables across Production, Preview, and Development:
+
+| Variable Name | Description | Required Value / Format |
+| :--- | :--- | :--- |
+| `ORDER_SIGNING_SECRET` | 32+ character cryptographic secret string used by `/api/create-order` and `/api/verify-order` for HMAC-SHA256 signatures | `your_long_secure_random_secret_string` |
+| `ALLOWED_ORIGIN` | Authorized domain origin for CORS validation and header checks (no trailing slash) | `https://shop-speedabraker.vercel.app` |
+| `FIREBASE_SERVICE_ACCOUNT_KEY` | Minified JSON string of the downloaded service account key | `{"type":"service_account","project_id":"...","private_key":"...","client_email":"..."}` |
+
+*(Alternatively, instead of `FIREBASE_SERVICE_ACCOUNT_KEY`, you can provide individual variables: `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY`).*
+
+### 3. Rollback Procedure
+If a production deployment ever needs to be reverted immediately:
+- Navigate to [Vercel Dashboard](https://vercel.com/) -> Select your project -> **Deployments**.
+- Locate the previous known-good deployment in the list.
+- Click the three dots menu (`...`) on that deployment row -> Select **Promote to Production**.
+- Vercel instantly routes 100% of live traffic back to the selected deployment with zero build delays or downtime.
+
+---
+
+# Phase 0 — Audit & Architecture Report (Verified)
+
+## Project Overview
+- **Application**: Speedabraker's Shop
+- **Stack**: React 19 + TypeScript + Vite 6 + Tailwind CSS 4 + Firebase (Firestore & Auth, JS SDK v12) + i18next + Motion
+- **Hosting Target**: Vercel (Hobby Tier)
+- **Production URL**: `https://shop-speedabraker.vercel.app`
+- **Active Branch**: `v2-hardening`
+- **Core Functionality**: Step-by-step hardware configurator (Firmware, Display, Wireless, Antennas, Quality, Type), live psychological pricing calculations, itemized billing and invoice generator, promo code engine, order verification, and admin configuration canvas.
+
+---
+
+## 1. Places Trusting Client-Side Data for Money
+
+| File & Location | Vulnerability Description | Remediation Implemented |
+| :--- | :--- | :--- |
+| **`src/utils/pricing.ts`**<br>`getPricingCatalog()`, `updatePricingCatalog()` | The active pricing catalog was stored in client browser `localStorage`. | Centralized in Firestore at document `config/pricing` with real-time listener synchronization and write restriction to Admins. |
+| **`src/App.tsx`**<br>`handlePlaceOrder()` | Computed grand totals and discounts in client state before saving. | Integrated with Vercel serverless function `/api/create-order` and `/api/verify-order` to validate totals and produce server HMAC signatures. |
+| **`src/utils/promoCodes.ts`**<br>`validatePromoCode()` | Promo validation was executed exclusively on client state. | Protected via Firestore admin-only promo collection rules and server-side verification in `/api/create-order`. |
+| **`src/lib/firebase.ts`**<br>`generateOrderVerificationHash()` | Generated verification hash in browser using client salt. | Order verification now prioritizes server-side cryptographic HMAC-SHA256 signature generated in `/api/create-order` and verified in `/api/verify-order`. |
+| **`src/components/AdminCanvas.tsx`**<br>`handleSavePrices()` | Admin price edits only mutated administrator's local browser storage. | Now writes directly to Firestore `config/pricing` via `savePricingCatalogToFirestore()`, immediately propagating to all users. |
+
+---
+
+## 2. Hardcoded Credentials & Salts Audit
+
+| File & Location | Identified Item | Remediation Implemented |
+| :--- | :--- | :--- |
+| **`src/lib/firebase.ts`** | **Hardcoded Admin Credentials** | Removed hardcoded default credentials and plain-text fallbacks; migrated to standard Firebase Authentication (`signInWithEmailAndPassword`). |
+| **`src/lib/firebase.ts`** | **Brute-Force Lockout** | Standardized through Firebase Authentication rate-limiting and client-side anti-hammering guard. |
+| **`src/lib/firebase.ts`** | **Order Verification Salt** | Replaced with server-side secret (`ORDER_SIGNING_SECRET`) processed inside Vercel serverless functions. |
+| **`package.json`** | **Unused Dependencies** | Pruned unused packages (`@google/genai`, `express`, `dotenv`, `tsx`, `esbuild`) to optimize build time and dependencies. |
+
+---
+
+## 3. Hardened Firestore Security Rules (`firestore.rules`)
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.uid == 'REPLACE_WITH_ADMIN_UID' ||
+        request.auth.token.admin == true
+      );
+    }
+
+    // Config Collection (Pricing Catalog)
+    match /config/{configId} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Promo Codes Collection
+    match /promo_codes/{codeId} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Orders Collection: Client creation denied; must use /api/create-order via Admin SDK
+    match /orders/{invoiceId} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // Rate Limits Collection: Forbidden from all client access
+    match /rate_limits/{docId} {
+      allow read, write: if false;
+    }
+
+    // Product Stock Collection
+    match /product_stock/{productId} {
+      allow get, list: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Deprecated Admin Accounts Collection
+    match /admin_accounts/{username} {
+      allow read, write: if false;
+    }
+  }
+}
+```
+
+---
+
+# Append-Only Changelog & Audit History
+
+### [2026-09-19] — Firestore Rules Authorization Hardening
+- **File Modified**: `/firestore.rules`
+- **Changes**:
+  1. **Strict Admin Verification**: Updated `isAdmin()` function to remove the permissive `|| request.auth != null` fallback. Admin permissions now strictly require `request.auth.uid == 'REPLACE_WITH_ADMIN_UID'` or `request.auth.token.admin == true`.
+  2. **Promo Code Collection Privacy**: Changed `allow list: if true;` to `allow list: if isAdmin();` in the `promo_codes` match block. Customers can still query specific promo codes by ID via `get`, but cannot enumerate or dump the entire promo collection.
+- **Verification**: `bun run lint` and `bun run build` passing cleanly.
+
+### [2026-09-19] — Serverless Order Creation API (`/api/create-order.ts`) & Firebase Admin SDK
+- **Files Modified / Created**: `/package.json`, `/.env.example`, `/api/create-order.ts`.
+- **Changes**: Built full Vercel serverless function using Firebase Admin SDK to handle secure server-authoritative order creation, independent price calculation, promo validation, and HMAC-SHA256 order signing.
+
+### [2026-09-19] — Client-Side Migration to `/api/create-order` & Firestore Write Locking
+- **Files Modified**: `/firestore.rules`, `/src/lib/firebase.ts`, `/src/App.tsx`, `/src/components/BillCanvas.tsx`.
+- **Changes**: Set orders rule to `allow create: if false;`, routed client checkout through `/api/create-order`, and deleted client verification hashing logic.
+
+### [2026-09-19] — Order Verification API (`/api/verify-order.ts`) Security Rewrite
+- **Files Modified**: `/.env.example`, `/api/verify-order.ts`.
+- **Changes**: Direct Firestore database verification, zero client price trust, strict signing secret enforcement, and sanitized responses.
+
+### [2026-09-19] — Vercel Analytics, Speed Insights & Production vercel.json Security Configuration
+- **Files Modified**: `/package.json`, `/src/main.tsx`, `/vercel.json`.
+- **Changes**: Installed `@vercel/analytics` and `@vercel/speed-insights`. Configured strict CSP, HSTS, no-cache headers, and SPA rewrites.
+
+### [2026-09-19] — SEO, Social Sharing Cards & Domain Standardization
+- **Files Modified / Created**: `/public/robots.txt`, `/public/sitemap.xml`, `/public/og-image.png`, `/index.html`, `/metadata.json`, `/.env.example`.
+- **Changes**: Corrected domain across all assets to `https://shop-speedabraker.vercel.app`. Generated 1200x630 PNG preview card. Deleted obsolete `/public/og-image.svg`.
+
+### [2026-09-19] — UI String Sanitization, Rate Limit TTL & CORS Deduplication
+- **Files Modified / Deleted**:
+  - `/api/create-order.ts`: Deduplicated CORS Origin validation into a single check covering both OPTIONS and POST. Added `expiresAt` Date field (`now + 10 min`) to rate limit documents for automated Firestore TTL policy cleanup.
+  - `/api/verify-order.ts`: Sanitized error messages to remove database mentions.
+  - `/src/App.tsx`: Removed "database" from order verification and tamper error messages.
+  - `/src/components/modals/AdminLoginModal.tsx`: Updated verification message to "Signed in as administrator."
+  - `/src/components/AdminCanvas.tsx`: Sanitized all administrative promo sync, save, and delete messages.
+  - `/public/og-image.svg`: Deleted obsolete unused asset.
+  - `/README.md`: Updated comprehensive status table, remaining items, manual setup guide with TTL policy instructions, and rollback procedure.

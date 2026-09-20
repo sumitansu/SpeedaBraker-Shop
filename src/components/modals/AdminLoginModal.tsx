@@ -195,7 +195,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                     <p className="text-xs text-neutral-500 max-w-xs mx-auto">
                       {t(
                         'modals.adminLogin.verifiedFirestore',
-                        'Administrator credentials verified against Firebase Firestore database.'
+                        'Signed in as administrator.'
                       )}
                     </p>
                   </div>

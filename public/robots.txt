@@ -3,4 +3,4 @@ User-agent: *
 Allow: /
 Disallow: /api/
 
-Sitemap: https://speedabraker-shop.vercel.app/sitemap.xml
+Sitemap: https://shop-speedabraker.vercel.app/sitemap.xml

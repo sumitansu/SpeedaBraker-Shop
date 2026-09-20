@@ -96,7 +96,7 @@ export default async function handler(req: any, res: any) {
     if (!orderDoc.exists) {
       return res.status(404).json({
         verified: false,
-        error: 'Order not found in database.',
+        error: 'Order not found.',
       });
     }
 

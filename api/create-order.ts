@@ -167,18 +167,14 @@ export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    const origin = req.headers?.origin || req.headers?.Origin;
-    if (allowedOrigin && origin && origin !== allowedOrigin) {
-      return res.status(403).end();
-    }
-    return res.status(200).end();
+  // Reject requests whose Origin header doesn't match when ALLOWED_ORIGIN is set
+  const origin = req.headers?.origin || req.headers?.Origin;
+  if (allowedOrigin && origin && origin !== allowedOrigin) {
+    return res.status(403).json({ error: 'Forbidden: Origin not allowed.' });
   }
 
-  // Reject requests whose Origin header doesn't match when ALLOWED_ORIGIN is set
-  const requestOrigin = req.headers?.origin || req.headers?.Origin;
-  if (allowedOrigin && requestOrigin && requestOrigin !== allowedOrigin) {
-    return res.status(403).json({ error: 'Forbidden: Origin not allowed.' });
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
 
   if (req.method !== 'POST') {
@@ -315,6 +311,7 @@ export default async function handler(req: any, res: any) {
           ipHash,
           timestamps,
           updatedAt: new Date(now).toISOString(),
+          expiresAt: new Date(now + WINDOW_MS),
         },
         { merge: true }
       );

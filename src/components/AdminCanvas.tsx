@@ -245,11 +245,11 @@ const AdminCanvasComponent: React.FC<AdminCanvasProps> = ({
       setNewMinOrder('0');
       setNewIsActive(true);
 
-      setPromoSuccessMsg(`Promo code "${cleanCode}" saved to Firebase.`);
+      setPromoSuccessMsg(`Promo code "${cleanCode}" saved.`);
       setTimeout(() => setPromoSuccessMsg(null), 4000);
     } catch (err) {
       console.error('Failed to save promo code:', err);
-      setPromoErrorMsg('Failed to save promo code to Firebase database.');
+      setPromoErrorMsg('Could not save the promo code.');
     } finally {
       setIsSubmittingPromo(false);
     }
@@ -264,7 +264,7 @@ const AdminCanvasComponent: React.FC<AdminCanvasProps> = ({
     try {
       await deletePromoCodeFromFirestore(code);
       setPromoList((prev) => prev.filter((p) => p.code !== code));
-      setPromoSuccessMsg(`Promo code "${code}" removed from Firebase.`);
+      setPromoSuccessMsg(`Promo code "${code}" removed.`);
       setTimeout(() => setPromoSuccessMsg(null), 3000);
     } catch (err) {
       console.error('Failed to delete promo code:', err);
@@ -398,7 +398,7 @@ const AdminCanvasComponent: React.FC<AdminCanvasProps> = ({
           {activeTab === 'promos' && (
             <div className="hidden xs:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>Live Firestore Promos</span>
+              <span>Live Promos</span>
             </div>
           )}
 
@@ -410,7 +410,7 @@ const AdminCanvasComponent: React.FC<AdminCanvasProps> = ({
               whileTap={{ scale: 0.95 }}
               onClick={handleManualRefresh}
               className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 rounded-lg border border-neutral-300 transition-colors cursor-pointer"
-              title="Refresh database records"
+              title="Refresh"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isPromoLoading ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Sync</span>
@@ -901,7 +901,7 @@ const AdminCanvasComponent: React.FC<AdminCanvasProps> = ({
                         Add New Promo Code
                       </h3>
                       <p className="text-xs text-neutral-500">
-                        Instantly synced with Firebase Firestore database
+                        Instantly synced
                       </p>
                     </div>
                   </div>
@@ -1057,21 +1057,21 @@ const AdminCanvasComponent: React.FC<AdminCanvasProps> = ({
                   <div className="px-4 py-3 bg-neutral-50/90 border-b border-neutral-200 flex items-center justify-between">
                     <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-700 flex items-center gap-1.5">
                       <Tag className="w-4 h-4 text-neutral-700" />
-                      <span>Database Promo Codes ({promoList.length})</span>
+                      <span>Promo Codes ({promoList.length})</span>
                     </h3>
                     <span className="text-xs text-neutral-500 font-medium">
-                      Pulled directly from Firestore
+                      Live and active
                     </span>
                   </div>
 
                   {isPromoLoading ? (
                     <div className="p-8 text-center">
                       <RefreshCw className="w-5 h-5 animate-spin text-neutral-400 mx-auto mb-2" />
-                      <p className="text-xs text-neutral-600 font-medium">Syncing promo codes from database...</p>
+                      <p className="text-xs text-neutral-600 font-medium">Syncing promo codes...</p>
                     </div>
                   ) : promoList.length === 0 ? (
                     <div className="p-8 text-center text-neutral-500 text-xs sm:text-sm">
-                      No promo codes found in database. Create one using the form above.
+                      No promo codes found. Create one using the form above.
                     </div>
                   ) : (
                     <div className="divide-y divide-neutral-100">
@@ -1163,7 +1163,7 @@ const AdminCanvasComponent: React.FC<AdminCanvasProps> = ({
                                   whileTap={{ scale: 0.96 }}
                                   onClick={() => handleDeletePromo(promo.code)}
                                   className="flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 rounded-lg text-xs font-bold border border-rose-200 hover:border-rose-300 cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
-                                  title={`Permanently delete promo code ${promo.code} from Firebase`}
+                                  title={`Permanently delete promo code ${promo.code}`}
                                 >
                                   {isDeleting ? (
                                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
