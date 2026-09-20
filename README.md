@@ -11,7 +11,7 @@
 | :--- | :--- | :--- |
 | **Firebase Project Migration** | Migrated to new Firebase Project `shop-speedabraker` with default `(default)` database (region `asia-south1` Mumbai). Updated `firebase-applet-config.json`, `src/lib/firebase.ts`, `api/create-order.ts`, `api/verify-order.ts`, and `.env.example`. | **DONE** |
 | **Firebase Auth Admin** | Configured `src/lib/firebase.ts` and `src/components/modals/AdminLoginModal.tsx` for real email/password authentication (`signInWithEmailAndPassword`) with admin UID `CZQpz3IbA9fX3fgYyhEHbA7zdz03`. | **DONE** |
-| **`isAdmin()` Firestore Rule** | Hardened `firestore.rules` to strictly require `request.auth.uid == 'CZQpz3IbA9fX3fgYyhEHbA7zdz03'` or authorized admin emails / claims. | **DONE** |
+| **`isAdmin()` Firestore Rule** | Hardened `firestore.rules` to strictly require `request.auth.uid == 'CZQpz3IbA9fX3fgYyhEHbA7zdz03'` or `request.auth.token.admin == true`. | **DONE** |
 | **Server-Side Order Creation** | Built `/api/create-order.ts` using Firebase Admin SDK. Recomputes all prices server-side, validates promos, enforces `.create()` conflict prevention (HTTP 409), generates `customerCode` strictly on server, signs with HMAC-SHA256, and uses clean deduplicated CORS Origin check. Strict project ID safety check against `shop-speedabraker`. | **DONE** |
 | **IP Rate Limiting & TTL** | Enforced 5 orders per IP per 10 minutes in `/api/create-order.ts` using `rate_limits` collection keyed by SHA-256 IP hash. Stores `expiresAt` Date field for automated Firestore TTL cleanup. | **DONE** |
 | **Server-Side Order Verification** | Rewrote `/api/verify-order.ts` to verify orders strictly against stored Firestore documents without trusting client totals or returning internal hash strings. Strict project ID safety check against `shop-speedabraker`. | **DONE** |
@@ -28,7 +28,7 @@
 
 # Migration
 
-The project was migrated from the legacy project `speedabrakers-shop-10a95` (which used a named Firestore database `speedabrakers-shop-database`) to the new production project **`shop-speedabraker`**.
+The project was migrated from the legacy project `speedabrakers-shop-10a95` to the new production project **`shop-speedabraker`**.
 
 Key architectural changes during migration:
 - **Project ID**: `shop-speedabraker` (region `asia-south1` Mumbai).
@@ -149,7 +149,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return request.auth != null && (
-        request.auth.uid == 'REPLACE_WITH_ADMIN_UID' ||
+        request.auth.uid == 'CZQpz3IbA9fX3fgYyhEHbA7zdz03' ||
         request.auth.token.admin == true
       );
     }
@@ -201,7 +201,7 @@ service cloud.firestore {
 ### [2026-09-19] — Firestore Rules Authorization Hardening
 - **File Modified**: `/firestore.rules`
 - **Changes**:
-  1. **Strict Admin Verification**: Updated `isAdmin()` function to remove the permissive `|| request.auth != null` fallback. Admin permissions now strictly require `request.auth.uid == 'REPLACE_WITH_ADMIN_UID'` or `request.auth.token.admin == true`.
+  1. **Strict Admin Verification**: Updated `isAdmin()` function to remove the permissive `|| request.auth != null` fallback. Admin permissions now strictly require `request.auth.uid == 'CZQpz3IbA9fX3fgYyhEHbA7zdz03'` or `request.auth.token.admin == true`.
   2. **Promo Code Collection Privacy**: Changed `allow list: if true;` to `allow list: if isAdmin();` in the `promo_codes` match block. Customers can still query specific promo codes by ID via `get`, but cannot enumerate or dump the entire promo collection.
 - **Verification**: `bun run lint` and `bun run build` passing cleanly.
 

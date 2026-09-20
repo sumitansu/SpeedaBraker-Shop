@@ -20,6 +20,8 @@ import {
 } from 'firebase/firestore';
 import firebaseConfigData from '../../firebase-applet-config.json';
 import { AppliedPromo, UpperBoxConfig, LowerSlotConfig, AntennaDbiType } from '../types';
+import { DEFAULT_PRICING_CATALOG } from '../utils/defaultPricing';
+import { PROMO_TIERS } from '../utils/promoCodes';
 
 export interface ProductStockRecord {
   productId: string;
@@ -575,29 +577,21 @@ export async function fetchAllProductStock(): Promise<ProductStockRecord[]> {
  * Admin-only operation with fields satisfying security rules.
  */
 export async function seedDefaultPromoCodes(): Promise<{ count: number }> {
-  const defaultTiers = [
-    { code: 'D10', type: 'percent' as const, value: 10, label: '10% Discount', minOrderValue: 0, active: true },
-    { code: 'D15', type: 'percent' as const, value: 15, label: '15% Special Discount', minOrderValue: 0, active: true },
-    { code: 'D20', type: 'percent' as const, value: 20, label: '20% Premium Discount', minOrderValue: 0, active: true },
-    { code: 'D50', type: 'percent' as const, value: 50, label: '50% Half Price Discount', minOrderValue: 0, active: true },
-    { code: 'F10', type: 'flat' as const, value: 100, label: '₹100 Flat Discount', minOrderValue: 0, active: true },
-    { code: 'F20', type: 'flat' as const, value: 200, label: '₹200 VIP Flat Discount', minOrderValue: 0, active: true },
-    { code: 'F50', type: 'flat' as const, value: 500, label: '₹500 Mega Flat Discount', minOrderValue: 0, active: true },
-  ];
+  const tiers = Object.values(PROMO_TIERS);
 
-  for (const tier of defaultTiers) {
-    const promoRef = doc(db, 'promo_codes', tier.code);
+  for (const tier of tiers) {
+    const promoRef = doc(db, 'promo_codes', tier.tierId);
     await setDoc(promoRef, {
-      code: tier.code,
+      code: tier.tierId,
       type: tier.type,
       value: tier.value,
       label: tier.label,
-      active: tier.active,
-      minOrderValue: tier.minOrderValue,
+      active: true,
+      minOrderValue: 0,
       createdAt: new Date().toISOString(),
     });
   }
-  return { count: defaultTiers.length };
+  return { count: tiers.length };
 }
 
 /**
@@ -615,21 +609,9 @@ export async function initializeStoreData(): Promise<{ stockCount: number; prici
   }
 
   // 2. Write default pricing catalog to config/pricing
-  const defaultCatalog = {
-    version: { V1: 100, V2: 300, None: 0 },
-    display: { Yes: 300, No: 0, None: 0 },
-    wireless: { Yes: 500, No: 0, None: 0 },
-    antenna: {
-      baseSocket: 50,
-      quality: { Normal: 200, Powerful: 700 },
-      dbi: { '0dbi': 100, '6dbi': 300, '12dbi': 500 },
-    },
-    mandatoryModules: 300,
-  };
-
   const pricingRef = doc(db, 'config', 'pricing');
   await setDoc(pricingRef, {
-    ...defaultCatalog,
+    ...DEFAULT_PRICING_CATALOG,
     updatedAt: new Date().toISOString(),
     updatedBy: auth.currentUser?.email || auth.currentUser?.uid || 'admin',
   });
