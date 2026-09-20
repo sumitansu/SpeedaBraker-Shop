@@ -1,5 +1,11 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  User as FirebaseUser,
+} from 'firebase/auth';
 import {
   initializeFirestore,
   getFirestore,
@@ -101,17 +107,8 @@ export interface FirestorePromoCodeRecord {
 export interface AdminAccountRecord {
   username: string;
   role: 'admin' | 'superadmin';
-  passwordHash: string;
-  salt: string;
   createdAt?: string;
 }
-
-export const DEFAULT_ADMIN_ACCOUNT = {
-  username: 'doraemon',
-  password: 'yumichan',
-  salt: 'sbs_admin_doraemon_salt_2026_x9',
-  role: 'admin' as const,
-};
 
 // Error handling helper per Firebase guidelines
 export enum OperationType {
@@ -305,13 +302,42 @@ export async function saveOrderToFirestore(
   appliedPromo: AppliedPromo | null
 ): Promise<{ success: boolean; hash: string }> {
   const appliedCode = appliedPromo ? appliedPromo.code : '';
-  const verificationHash = await generateOrderVerificationHash(
-    invoiceNumber,
-    itemCode,
-    customerCode,
-    payableTotal,
-    appliedCode
-  );
+  let verificationHash = '';
+
+  // Attempt server-side cryptographic hash calculation via Vercel Serverless API
+  try {
+    const res = await fetch('/api/verify-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        invoiceNumber,
+        itemCode,
+        customerCode,
+        itemsSubtotal,
+        discountAmount,
+        payableTotal,
+        appliedPromoCode: appliedCode,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.serverHash) {
+        verificationHash = data.serverHash;
+      }
+    }
+  } catch {
+    // API endpoint unavailable in offline/local preview mode; proceed to client fallback
+  }
+
+  if (!verificationHash) {
+    verificationHash = await generateOrderVerificationHash(
+      invoiceNumber,
+      itemCode,
+      customerCode,
+      payableTotal,
+      appliedCode
+    );
+  }
 
   const orderPayload: FirestoreOrderRecord = {
     invoiceNumber,
@@ -371,16 +397,46 @@ export async function verifyOrderInFirestore(invoiceNumber: string): Promise<{
 
     const data = snap.data() as FirestoreOrderRecord;
 
-    // Verify hash
-    const expectedHash = await generateOrderVerificationHash(
-      data.invoiceNumber,
-      data.itemCode,
-      data.customerCode,
-      data.payableTotal,
-      data.appliedPromoCode || ''
-    );
+    // Check server-side verification first, fallback to client hash
+    let isHashValid = false;
+    try {
+      const res = await fetch('/api/verify-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoiceNumber: data.invoiceNumber,
+          itemCode: data.itemCode,
+          customerCode: data.customerCode,
+          itemsSubtotal: data.itemsSubtotal,
+          discountAmount: data.discountAmount,
+          payableTotal: data.payableTotal,
+          appliedPromoCode: data.appliedPromoCode || '',
+        }),
+      });
+      if (res.ok) {
+        const verifyRes = await res.json();
+        if (verifyRes.serverHash && verifyRes.serverHash === data.verificationHash) {
+          isHashValid = true;
+        }
+      }
+    } catch {
+      // Ignore API error in offline/local preview mode
+    }
 
-    if (expectedHash !== data.verificationHash) {
+    if (!isHashValid) {
+      const expectedHash = await generateOrderVerificationHash(
+        data.invoiceNumber,
+        data.itemCode,
+        data.customerCode,
+        data.payableTotal,
+        data.appliedPromoCode || ''
+      );
+      if (expectedHash === data.verificationHash) {
+        isHashValid = true;
+      }
+    }
+
+    if (!isHashValid) {
       return {
         exists: true,
         message: 'Security warning: Order hash verification failed (tampered).',
@@ -414,43 +470,9 @@ export async function verifyOrderInFirestore(invoiceNumber: string): Promise<{
   }
 }
 
-/**
- * Computes salted SHA-256 hash using Web Crypto API.
- */
-export async function hashPasswordWithSalt(password: string, salt: string): Promise<string> {
-  const payload = `SBS_ADMIN_SALT_v1:${salt}:${password}`;
-  const encoder = new TextEncoder();
-  const data = encoder.encode(payload);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-// Initial seed for admin accounts in Firestore
-let adminSeedInitiated = false;
+// Admin account seeding is no longer needed with Firebase Authentication
 export async function ensureAdminAccountSeeded(): Promise<void> {
-  if (adminSeedInitiated) return;
-  adminSeedInitiated = true;
-
-  try {
-    const adminRef = doc(db, 'admin_accounts', DEFAULT_ADMIN_ACCOUNT.username);
-    const snapshot = await getDoc(adminRef);
-    if (!snapshot.exists()) {
-      const passwordHash = await hashPasswordWithSalt(
-        DEFAULT_ADMIN_ACCOUNT.password,
-        DEFAULT_ADMIN_ACCOUNT.salt
-      );
-      await setDoc(adminRef, {
-        username: DEFAULT_ADMIN_ACCOUNT.username,
-        role: DEFAULT_ADMIN_ACCOUNT.role,
-        passwordHash,
-        salt: DEFAULT_ADMIN_ACCOUNT.salt,
-        createdAt: new Date().toISOString(),
-      });
-    }
-  } catch (err) {
-    console.warn('Firebase admin seed note:', err);
-  }
+  // Deprecated: Migrated to Firebase Authentication (email/password)
 }
 
 // --- Brute Force & Attack Protection State ---
@@ -559,18 +581,18 @@ export function sanitizeAndValidateAccount(rawInput: string): { valid: boolean; 
   const clean = rawInput.trim();
 
   if (!clean) {
-    return { valid: false, cleanAccount: '', error: 'Account username is required.' };
+    return { valid: false, cleanAccount: '', error: 'Admin email or account name is required.' };
   }
 
-  if (clean.length < 3 || clean.length > 32) {
-    return { valid: false, cleanAccount: '', error: 'Account name must be between 3 and 32 characters.' };
+  if (clean.length < 3 || clean.length > 64) {
+    return { valid: false, cleanAccount: '', error: 'Account identifier must be between 3 and 64 characters.' };
   }
 
   // Check for common SQL injection or script injection signatures
   const injectionPatterns = [
-    /['";\-]/,               // SQL quote / delimiter / comment marks
-    /(\bUNION\b|\bSELECT\b|\bDROP\b|\bINSERT\b|\bUPDATE\b|\bDELETE\b|\bOR\b|\bAND\b)/i, // SQL keywords
-    /[<>{}\\\/\$\*\?]/,      // Script / regex / NoSQL operators ($gt, <script>, etc)
+    /['";]/,                 // SQL quote / delimiter
+    /(\bUNION\b|\bSELECT\b|\bDROP\b|\bINSERT\b|\bUPDATE\b|\bDELETE\b)/i, // Dangerous SQL keywords
+    /[<>{}\\\$\*]/,          // Script / tags / regex operators
   ];
 
   for (const pattern of injectionPatterns) {
@@ -578,18 +600,31 @@ export function sanitizeAndValidateAccount(rawInput: string): { valid: boolean; 
       return {
         valid: false,
         cleanAccount: '',
-        error: 'Security Warning: Special symbols, injection keywords, and operators are prohibited.',
+        error: 'Security Warning: Special characters or injection tokens are prohibited.',
       };
     }
   }
 
-  // Strictly enforce alphanumeric + underscore
+  // If email format
+  if (clean.includes('@')) {
+    const emailRegex = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/;
+    if (!emailRegex.test(clean)) {
+      return {
+        valid: false,
+        cleanAccount: '',
+        error: 'Please enter a valid email address.',
+      };
+    }
+    return { valid: true, cleanAccount: clean.toLowerCase() };
+  }
+
+  // Strictly enforce alphanumeric + underscore for username alias
   const safeRegex = /^[a-zA-Z0-9_]+$/;
   if (!safeRegex.test(clean)) {
     return {
       valid: false,
       cleanAccount: '',
-      error: 'Account name can only contain letters, numbers, and underscores.',
+      error: 'Account name can only contain letters, numbers, underscores, or a valid email address.',
     };
   }
 
@@ -597,10 +632,10 @@ export function sanitizeAndValidateAccount(rawInput: string): { valid: boolean; 
 }
 
 /**
- * Verifies admin credentials against Firestore admin_accounts collection with multi-layer attack defenses.
+ * Authenticates admin via official Firebase Authentication (email and password).
  */
-export async function verifyAdminCredentials(
-  rawAccount: string,
+export async function loginAdminWithFirebase(
+  rawAccountOrEmail: string,
   rawPassword: string
 ): Promise<{
   success: boolean;
@@ -620,110 +655,149 @@ export async function verifyAdminCredentials(
     };
   }
 
-  // 2. Validate and Sanitize Account Identifier against injection attacks
-  const accValidation = sanitizeAndValidateAccount(rawAccount);
-  if (!accValidation.valid) {
-    const failResult = recordFailedAttempt();
-    return {
-      success: false,
-      error: accValidation.error || 'Invalid account name.',
-      remainingAttempts: failResult.remainingAttempts,
-      lockoutSeconds: failResult.remainingSeconds,
-    };
+  const cleanInput = (rawAccountOrEmail || '').trim();
+  if (!cleanInput) {
+    return { success: false, error: 'Email or admin username is required.' };
   }
-
-  const username = accValidation.cleanAccount;
-
-  // 3. Validate Password
-  if (!rawPassword || typeof rawPassword !== 'string') {
+  if (!rawPassword) {
     return { success: false, error: 'Password is required.' };
   }
-  if (rawPassword.length > 128) {
+
+  // Support both full email address and username prefix
+  const emailToUse = cleanInput.includes('@') ? cleanInput : `${cleanInput.toLowerCase()}@speedabraker.com`;
+
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, emailToUse, rawPassword);
+    resetFailedAttempts();
+    return {
+      success: true,
+      username: userCredential.user.email || userCredential.user.displayName || cleanInput,
+      role: 'admin',
+    };
+  } catch (err: unknown) {
+    console.warn('Firebase Auth login attempt result:', err);
     const failResult = recordFailedAttempt();
+    let message = 'Invalid admin credentials.';
+    const firebaseErr = err as { code?: string; message?: string };
+    if (
+      firebaseErr?.code === 'auth/invalid-credential' ||
+      firebaseErr?.code === 'auth/wrong-password' ||
+      firebaseErr?.code === 'auth/user-not-found'
+    ) {
+      message = 'Invalid email or password.';
+    } else if (firebaseErr?.code === 'auth/too-many-requests') {
+      message = 'Too many failed attempts. Firebase has temporarily blocked requests.';
+    } else if (firebaseErr?.message) {
+      message = firebaseErr.message;
+    }
+
+    if (failResult.isNowLocked) {
+      return {
+        success: false,
+        error: `Security Lock: Maximum failed attempts reached. Login locked for ${LOCKOUT_DURATION_SECONDS} seconds.`,
+        lockoutSeconds: LOCKOUT_DURATION_SECONDS,
+      };
+    }
+
     return {
       success: false,
-      error: 'Password exceeds maximum length.',
+      error: `${message} ${failResult.remainingAttempts} attempt(s) remaining before temporary lockout.`,
       remainingAttempts: failResult.remainingAttempts,
     };
   }
+}
 
-  // 4. Rate-limit delay (mimic standard crypto delay to prevent timing attacks)
-  const startTime = Date.now();
+/**
+ * Proxy for backward compatibility with existing components
+ */
+export async function verifyAdminCredentials(
+  rawAccount: string,
+  rawPassword: string
+): Promise<{
+  success: boolean;
+  username?: string;
+  role?: string;
+  error?: string;
+  remainingAttempts?: number;
+  lockoutSeconds?: number;
+}> {
+  return loginAdminWithFirebase(rawAccount, rawPassword);
+}
 
+/**
+ * Signs out the currently authenticated admin
+ */
+export async function logoutAdmin(): Promise<void> {
+  await signOut(auth);
+}
+
+/**
+ * Subscribes to Firebase Authentication state changes
+ */
+export function subscribeAdminAuth(callback: (user: FirebaseUser | null) => void): () => void {
+  return onAuthStateChanged(auth, callback);
+}
+
+/**
+ * Saves centralized pricing catalog to Firestore config/pricing document.
+ */
+export async function savePricingCatalogToFirestore(catalogData: unknown): Promise<void> {
   try {
-    // Ensure admin accounts are seeded
-    await ensureAdminAccountSeeded();
-
-    const adminDocRef = doc(db, 'admin_accounts', username);
-    const snap = await getDoc(adminDocRef);
-
-    let accountRecord: AdminAccountRecord | null = null;
-
-    if (snap.exists()) {
-      accountRecord = snap.data() as AdminAccountRecord;
-    } else if (username === DEFAULT_ADMIN_ACCOUNT.username) {
-      // Fallback local memory record for default admin seed in case Firestore lookup is restricted
-      const hash = await hashPasswordWithSalt(DEFAULT_ADMIN_ACCOUNT.password, DEFAULT_ADMIN_ACCOUNT.salt);
-      accountRecord = {
-        username: DEFAULT_ADMIN_ACCOUNT.username,
-        role: DEFAULT_ADMIN_ACCOUNT.role,
-        salt: DEFAULT_ADMIN_ACCOUNT.salt,
-        passwordHash: hash,
-      };
-    }
-
-    // Compute hash with salt or dummy salt for timing equalization
-    const saltToUse = accountRecord ? accountRecord.salt : 'dummy_entropy_salt_protect_timing';
-    const computedHash = await hashPasswordWithSalt(rawPassword, saltToUse);
-
-    // Timing normalization delay (minimum 250ms delay to deter high-speed offline/online brute force)
-    const elapsed = Date.now() - startTime;
-    if (elapsed < 250) {
-      await new Promise((resolve) => setTimeout(resolve, 250 - elapsed));
-    }
-
-    if (!accountRecord || accountRecord.passwordHash !== computedHash) {
-      const failResult = recordFailedAttempt();
-      if (failResult.isNowLocked) {
-        return {
-          success: false,
-          error: `Security Lock: Maximum failed attempts reached. Login locked for ${LOCKOUT_DURATION_SECONDS} seconds.`,
-          lockoutSeconds: LOCKOUT_DURATION_SECONDS,
-        };
-      }
-      return {
-        success: false,
-        error: `Invalid account name or password. ${failResult.remainingAttempts} attempt(s) remaining before lockout.`,
-        remainingAttempts: failResult.remainingAttempts,
-      };
-    }
-
-    // Success: Reset failed attempts counter
-    resetFailedAttempts();
-
-    return {
-      success: true,
-      username: accountRecord.username,
-      role: accountRecord.role,
-    };
+    const pricingRef = doc(db, 'config', 'pricing');
+    await setDoc(
+      pricingRef,
+      {
+        ...(catalogData as object),
+        updatedAt: new Date().toISOString(),
+        updatedBy: auth.currentUser?.email || auth.currentUser?.uid || 'admin',
+      },
+      { merge: true }
+    );
   } catch (err) {
-    console.error('Admin authentication error:', err);
-    // Secure fallback verification for default admin
-    if (username === DEFAULT_ADMIN_ACCOUNT.username && rawPassword === DEFAULT_ADMIN_ACCOUNT.password) {
-      resetFailedAttempts();
-      return {
-        success: true,
-        username: DEFAULT_ADMIN_ACCOUNT.username,
-        role: DEFAULT_ADMIN_ACCOUNT.role,
-      };
-    }
+    handleFirestoreError(err, OperationType.WRITE, 'config/pricing');
+    throw err;
+  }
+}
 
-    const failResult = recordFailedAttempt();
-    return {
-      success: false,
-      error: 'Authentication failed. Please verify your credentials.',
-      remainingAttempts: failResult.remainingAttempts,
-    };
+/**
+ * Fetches centralized pricing catalog from Firestore.
+ */
+export async function fetchPricingCatalogFromFirestore(): Promise<Record<string, unknown> | null> {
+  try {
+    const pricingRef = doc(db, 'config', 'pricing');
+    const snap = await getDoc(pricingRef);
+    if (snap.exists()) {
+      return snap.data() as Record<string, unknown>;
+    }
+    return null;
+  } catch (err) {
+    console.warn('Firestore pricing fetch note (using defaults):', err);
+    return null;
+  }
+}
+
+/**
+ * Subscribes to real-time changes in the centralized pricing catalog in Firestore.
+ */
+export function subscribePricingCatalogFromFirestore(
+  callback: (catalog: Record<string, unknown>) => void
+): () => void {
+  try {
+    const pricingRef = doc(db, 'config', 'pricing');
+    return onSnapshot(
+      pricingRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          callback(docSnap.data() as Record<string, unknown>);
+        }
+      },
+      (error) => {
+        console.warn('Realtime pricing listener note:', error);
+      }
+    );
+  } catch (err) {
+    console.warn('Realtime pricing subscription error:', err);
+    return () => {};
   }
 }
 

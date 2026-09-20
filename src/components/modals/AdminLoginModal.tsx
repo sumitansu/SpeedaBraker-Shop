@@ -15,6 +15,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import {
+  loginAdminWithFirebase,
   verifyAdminCredentials,
   checkLockoutStatus,
   sanitizeAndValidateAccount,
@@ -103,7 +104,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
     setIsLoading(true);
 
     try {
-      const result = await verifyAdminCredentials(account, password);
+      const result = await loginAdminWithFirebase(account, password);
 
       if (result.success && result.username) {
         setJustLoggedIn(true);
@@ -289,7 +290,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                       htmlFor="admin-account-input"
                       className="block text-xs font-semibold text-neutral-700"
                     >
-                      {t('modals.adminLogin.account', 'Account / Username')}
+                      {t('modals.adminLogin.account', 'Admin Email / Username')}
                     </label>
                     <div className="relative group">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400 group-focus-within:text-neutral-900 transition-colors">
@@ -302,15 +303,15 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
                         type="text"
                         value={account}
                         onChange={(e) => setAccount(e.target.value)}
-                        placeholder={t('modals.adminLogin.accountPlaceholder', 'Enter account username')}
-                        autoComplete="off"
+                        placeholder={t('modals.adminLogin.accountPlaceholder', 'admin@example.com or admin')}
+                        autoComplete="username"
                         autoCorrect="off"
                         autoCapitalize="none"
                         spellCheck="false"
                         data-lpignore="true"
                         data-form-type="other"
                         disabled={isLoading || lockoutCountdown > 0}
-                        maxLength={32}
+                        maxLength={64}
                         className="w-full pl-9 pr-3 py-2 text-sm bg-neutral-50/70 hover:bg-neutral-50 focus:bg-white border border-neutral-300 rounded-xl text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900/15 focus:border-neutral-900 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                       />
                     </div>

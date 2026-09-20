@@ -3,16 +3,55 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Speedabraker's Shop</title>
-    <meta name="description" content="Speedabraker's Shop layout with structured top control grid, step-by-step hardware configurator, and itemized bill and invoice generator." />
-    <meta property="og:title" content="Speedabraker's Shop" />
-    <meta property="og:description" content="Speedabraker's Shop layout with structured top control grid, step-by-step hardware configurator, and itemized bill and invoice generator." />
+    
+    <!-- Primary Page Metadata -->
+    <title>Speedabraker's Shop — Hardware Configurator & Bill Generator</title>
+    <meta name="title" content="Speedabraker's Shop — Hardware Configurator & Bill Generator" />
+    <meta name="description" content="Custom IoT hardware configurator, instant itemized billing, invoice generation, antenna selection, and order verification for Speedabraker devices." />
+    <meta name="keywords" content="hardware configurator, IoT, antenna, firmware, electronics bill generator, invoice generator, Speedabraker" />
+    <meta name="author" content="Speedabraker" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#18181b" />
+
+    <!-- Open Graph / Facebook / LinkedIn -->
     <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary_large_image" />
+    <meta property="og:site_name" content="Speedabraker's Shop" />
+    <meta property="og:title" content="Speedabraker's Shop — Hardware Configurator & Bill Generator" />
+    <meta property="og:description" content="Custom IoT hardware configurator, instant itemized billing, invoice generation, antenna selection, and order verification for Speedabraker devices." />
+    <meta property="og:image" content="/favicon.svg" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Speedabraker's Shop — Hardware Configurator & Bill Generator" />
+    <meta name="twitter:description" content="Custom IoT hardware configurator, instant itemized billing, invoice generation, antenna selection, and order verification for Speedabraker devices." />
+    <meta name="twitter:image" content="/favicon.svg" />
+
+    <!-- Favicon & PWA Icons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Schema.org Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "OnlineStore",
+      "name": "Speedabraker's Shop",
+      "description": "Custom IoT hardware configurator, instant itemized billing, invoice generation, antenna selection, and order verification.",
+      "currenciesAccepted": "INR",
+      "paymentAccepted": "Cash, UPI, Credit Card",
+      "priceRange": "₹₹",
+      "hasMerchantReturnPolicy": {
+        "@type": "MerchantReturnPolicy",
+        "returnPolicyCategory": "https://schema.org/MerchantReturnFiniteReturnWindow",
+        "merchantReturnDays": 7
+      }
+    }
+    </script>
   </head>
-  <body>
+  <body class="bg-neutral-50 text-neutral-900 antialiased selection:bg-neutral-900 selection:text-white">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

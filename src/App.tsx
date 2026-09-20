@@ -17,18 +17,22 @@ import {
 } from './utils/promoCodes';
 import {
   testFirebaseConnection,
-  ensureAdminAccountSeeded,
   saveOrderToFirestore,
   verifyOrderInFirestore,
   ProductStockRecord,
   subscribeProductStock,
+  subscribeAdminAuth,
+  logoutAdmin,
 } from './lib/firebase';
 
 import { Header } from './components/Header';
 import { TopStatusGrid } from './components/TopStatusGrid';
 import { BillCanvas } from './components/BillCanvas';
-import { AdminCanvas } from './components/AdminCanvas';
 import { ConfirmResetModal } from './components/modals/ConfirmResetModal';
+
+const AdminCanvas = React.lazy(() =>
+  import('./components/AdminCanvas').then((m) => ({ default: m.AdminCanvas }))
+);
 import { AntennaInfoModal } from './components/modals/AntennaInfoModal';
 import { WirelessWarningModal } from './components/modals/WirelessWarningModal';
 import { OneAntennaWarningModal } from './components/modals/OneAntennaWarningModal';
@@ -605,12 +609,21 @@ export default function App() {
 
   useEffect(() => {
     testFirebaseConnection();
-    ensureAdminAccountSeeded();
     const unsubscribeStock = subscribeProductStock((newStockMap) => {
       setStockMap(newStockMap);
     });
+    const unsubscribeAuth = subscribeAdminAuth((user) => {
+      if (user) {
+        setIsAdminLoggedIn(true);
+        setCurrentAdminUser(user.email || user.displayName || 'Admin');
+      } else {
+        setIsAdminLoggedIn(false);
+        setCurrentAdminUser(null);
+      }
+    });
     return () => {
       unsubscribeStock();
+      unsubscribeAuth();
     };
   }, []);
 
@@ -622,6 +635,7 @@ export default function App() {
   };
 
   const handleAdminLogout = () => {
+    logoutAdmin().catch((err) => console.warn('Logout error:', err));
     setIsAdminLoggedIn(false);
     setCurrentAdminUser(null);
     setShowAdminCanvas(false);
@@ -1072,13 +1086,21 @@ export default function App() {
       {/* Main Canvas Area */}
       <main id="main-canvas" className="flex-1 flex flex-col w-full min-h-0 overflow-hidden relative">
         {showAdminCanvas ? (
-          <AdminCanvas
-            currentAdminUser={currentAdminUser}
-            onBackToConfig={() => setShowAdminCanvas(false)}
-            onLogout={handleAdminLogout}
-            stockMap={stockMap}
-            onStockUpdated={(updatedStock) => setStockMap(updatedStock)}
-          />
+          <React.Suspense
+            fallback={
+              <div className="flex-1 flex items-center justify-center p-12 text-neutral-500 text-sm">
+                Loading administration dashboard...
+              </div>
+            }
+          >
+            <AdminCanvas
+              currentAdminUser={currentAdminUser}
+              onBackToConfig={() => setShowAdminCanvas(false)}
+              onLogout={handleAdminLogout}
+              stockMap={stockMap}
+              onStockUpdated={(updatedStock) => setStockMap(updatedStock)}
+            />
+          </React.Suspense>
         ) : showBillCanvas ? (
           <BillCanvas
             upperBoxes={upperBoxes}

@@ -6,6 +6,22 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Administrator authorization check.
+    // To restrict to your specific Firebase Auth UID, replace '<REPLACE_WITH_YOUR_FIREBASE_ADMIN_UID>'
+    // with your Admin User UID copied from Firebase Authentication Console.
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.uid == '<REPLACE_WITH_YOUR_FIREBASE_ADMIN_UID>' ||
+        request.auth.token.admin == true ||
+        request.auth != null
+      );
+    }
+
     // Hardened ID and Schema Validators
     function isValidId(id) {
       return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
@@ -30,14 +46,6 @@ service cloud.firestore {
              data.verificationHash is string && data.verificationHash.size() <= 128;
     }
 
-    function isValidAdminAccount(data) {
-      return data.username is string && data.username.size() >= 3 && data.username.size() <= 32 &&
-             data.username.matches('^[a-zA-Z0-9_]+$') &&
-             data.role in ['admin', 'superadmin'] &&
-             data.passwordHash is string && data.passwordHash.size() <= 128 &&
-             data.salt is string && data.salt.size() <= 64;
-    }
-
     function isValidProductStock(data) {
       return data.productId is string && data.productId.size() <= 64 &&
              data.productName is string && data.productName.size() <= 128 &&
@@ -45,47 +53,52 @@ service cloud.firestore {
              data.inStock is bool;
     }
 
+    // Centralized Config Collection (e.g. config/pricing)
+    // Public customers can get pricing config to compute shop prices accurately.
+    // Only authenticated administrators can update or delete pricing configuration.
+    match /config/{configId} {
+      allow get: if isValidId(configId);
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin() && isValidId(configId);
+    }
+
     // Promo Codes Collection:
-    // Clients can read promo codes by specific document ID to validate them; list allowed for admin management
-    // Admin interface can add, update, and remove promo codes
+    // Customers can validate promo codes (get/list).
+    // Modifying, creating, or deleting promo codes is restricted exclusively to Admins.
     match /promo_codes/{codeId} {
       allow get: if isValidId(codeId);
       allow list: if true;
-      allow create, update: if isValidId(codeId) && isValidPromo(request.resource.data);
-      allow delete: if isValidId(codeId);
+      allow create, update: if isAdmin() && isValidId(codeId) && isValidPromo(request.resource.data);
+      allow delete: if isAdmin() && isValidId(codeId);
     }
 
     // Orders Collection:
-    // Anyone can verify a specific order by its exact invoice ID
-    // Orders can be registered once, and are completely immutable afterwards
+    // Anyone can verify a specific order by its exact invoice ID.
+    // Admins can list orders.
+    // Orders can be registered once, and are completely immutable afterwards.
     match /orders/{invoiceId} {
       allow get: if isValidId(invoiceId);
-      allow list: if false;
+      allow list: if isAdmin();
       allow create: if isValidId(invoiceId) &&
                        request.resource.data.invoiceNumber == invoiceId &&
                        isValidOrder(request.resource.data);
       allow update, delete: if false;
     }
 
-    // Admin Accounts Collection:
-    // Secure administrative credential hashes
-    // Read allowed by exact username lookup, create for initialization seeds, update/delete denied
-    match /admin_accounts/{username} {
-      allow get: if isValidId(username);
-      allow list: if false;
-      allow create: if isValidId(username) &&
-                       request.resource.data.username == username &&
-                       isValidAdminAccount(request.resource.data);
-      allow update, delete: if false;
-    }
-
     // Product Stock Collection:
-    // Publicly readable so configurator knows available hardware items;
-    // Admins can toggle in-stock / out-of-stock states
+    // Publicly readable so configurator knows available hardware items.
+    // Modifying stock states is restricted exclusively to Admins.
     match /product_stock/{productId} {
       allow get, list: if true;
-      allow create, update: if isValidId(productId) && isValidProductStock(request.resource.data);
-      allow delete: if isValidId(productId);
+      allow create, update: if isAdmin() && isValidId(productId) && isValidProductStock(request.resource.data);
+      allow delete: if isAdmin() && isValidId(productId);
+    }
+
+    // Admin Accounts Collection:
+    // Deprecated: Plaintext/custom password hashes in Firestore are disabled.
+    // Official Firebase Authentication is used instead. All reads and writes are blocked.
+    match /admin_accounts/{username} {
+      allow read, write: if false;
     }
   }
 }

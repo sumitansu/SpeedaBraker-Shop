@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
 import { UpperBoxConfig, LowerSlotConfig, AntennaDbiType } from '../types';
+import {
+  savePricingCatalogToFirestore,
+  subscribePricingCatalogFromFirestore,
+} from '../lib/firebase';
 
 export interface PricingCatalog {
   version: {
@@ -156,6 +160,11 @@ export function updatePricingCatalog(newCatalog: Partial<PricingCatalog>): Prici
     console.warn('Failed to persist pricing catalog to localStorage:', err);
   }
 
+  // Persist to centralized Firestore config/pricing
+  savePricingCatalogToFirestore(activePricingCatalog).catch((err) => {
+    console.warn('Could not persist pricing to Firestore (check admin privileges):', err);
+  });
+
   listeners.forEach((listener) => listener(activePricingCatalog));
   return activePricingCatalog;
 }
@@ -167,8 +176,59 @@ export function resetPricingCatalog(): PricingCatalog {
   } catch (err) {
     console.warn('Failed to clear pricing catalog from localStorage:', err);
   }
+
+  savePricingCatalogToFirestore(DEFAULT_PRICING_CATALOG).catch((err) => {
+    console.warn('Could not reset pricing in Firestore:', err);
+  });
+
   listeners.forEach((listener) => listener(activePricingCatalog));
   return activePricingCatalog;
+}
+
+// Automatically subscribe to real-time updates from Firestore config/pricing
+try {
+  subscribePricingCatalogFromFirestore((remoteCatalog) => {
+    if (remoteCatalog && typeof remoteCatalog === 'object') {
+      activePricingCatalog = {
+        ...activePricingCatalog,
+        ...(remoteCatalog as Partial<PricingCatalog>),
+        version: {
+          ...activePricingCatalog.version,
+          ...((remoteCatalog as any).version || {}),
+        },
+        display: {
+          ...activePricingCatalog.display,
+          ...((remoteCatalog as any).display || {}),
+        },
+        wireless: {
+          ...activePricingCatalog.wireless,
+          ...((remoteCatalog as any).wireless || {}),
+        },
+        antenna: {
+          ...activePricingCatalog.antenna,
+          ...((remoteCatalog as any).antenna || {}),
+          quality: {
+            ...activePricingCatalog.antenna.quality,
+            ...((remoteCatalog as any).antenna?.quality || {}),
+          },
+          dbi: {
+            ...activePricingCatalog.antenna.dbi,
+            ...((remoteCatalog as any).antenna?.dbi || {}),
+          },
+        },
+      };
+
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(activePricingCatalog));
+      } catch {
+        // ignore storage warning
+      }
+
+      listeners.forEach((listener) => listener(activePricingCatalog));
+    }
+  });
+} catch (err) {
+  console.warn('Firestore pricing catalog listener setup:', err);
 }
 
 export function subscribePricingCatalog(listener: (catalog: PricingCatalog) => void): () => void {
