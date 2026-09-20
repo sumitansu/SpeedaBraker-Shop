@@ -34,6 +34,8 @@ import {
   fetchAllPromoCodesFromFirestore,
   DEFAULT_PRODUCT_STOCK,
   updateProductStockInFirestore,
+  seedDefaultPromoCodes,
+  initializeStoreData,
 } from '../lib/firebase';
 import {
   getPricingCatalog,
@@ -291,6 +293,57 @@ const AdminCanvasComponent: React.FC<AdminCanvasProps> = ({
     }
   };
 
+  const [isImportingDefaultPromos, setIsImportingDefaultPromos] = useState<boolean>(false);
+  const [isInitializingStore, setIsInitializingStore] = useState<boolean>(false);
+
+  const handleImportDefaultPromos = async () => {
+    setIsImportingDefaultPromos(true);
+    setPromoErrorMsg(null);
+    setPromoSuccessMsg(null);
+    try {
+      const res = await seedDefaultPromoCodes();
+      setPromoSuccessMsg(
+        `Default promo codes (D10, D15, D20, D50, F10, F20, F50) successfully imported (${res.count} codes).`
+      );
+      setTimeout(() => setPromoSuccessMsg(null), 5000);
+      handleManualRefresh();
+    } catch (err: any) {
+      console.error('Failed to import default promo codes:', err);
+      setPromoErrorMsg('Failed to import default promo codes: ' + (err?.message || 'Permission denied or network error.'));
+    } finally {
+      setIsImportingDefaultPromos(false);
+    }
+  };
+
+  const handleInitializeStore = async () => {
+    setIsInitializingStore(true);
+    setPricingSuccessMsg(null);
+    try {
+      const res = await initializeStoreData();
+      const defaultCatalog = DEFAULT_PRICING_CATALOG;
+      setPricingForm(JSON.parse(JSON.stringify(defaultCatalog)));
+      updatePricingCatalog(defaultCatalog);
+      setLocalStockList(
+        DEFAULT_PRODUCT_STOCK.map((item) => ({ ...item, inStock: true }))
+      );
+      const newMap: Record<string, boolean> = {};
+      DEFAULT_PRODUCT_STOCK.forEach((p) => {
+        newMap[p.productId] = true;
+      });
+      onStockUpdated(newMap);
+
+      setPricingSuccessMsg(
+        `Store data successfully initialised: ${res.stockCount} stock items & default pricing catalog written to Firestore.`
+      );
+      setTimeout(() => setPricingSuccessMsg(null), 6000);
+    } catch (err: any) {
+      console.error('Failed to initialise store data:', err);
+      alert('Failed to initialise store data: ' + (err?.message || 'Error occurred.'));
+    } finally {
+      setIsInitializingStore(false);
+    }
+  };
+
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
@@ -395,8 +448,39 @@ const AdminCanvasComponent: React.FC<AdminCanvasProps> = ({
 
         {/* Live Status & Actions */}
         <div className="flex items-center gap-2 sm:gap-3">
+          <motion.button
+            id="btn-init-store-data"
+            type="button"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            disabled={isInitializingStore}
+            onClick={() => {
+              if (
+                window.confirm(
+                  'Are you sure you want to initialise store data? This will write DEFAULT_PRODUCT_STOCK to product_stock and the default catalog to config/pricing in Firestore.'
+                )
+              ) {
+                handleInitializeStore();
+              }
+            }}
+            className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 text-xs font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-200 hover:border-amber-300 transition-colors cursor-pointer shadow-2xs disabled:opacity-50"
+            title="Write default product stock and pricing catalog to Firestore"
+          >
+            {isInitializingStore ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-700" />
+                <span>Initialising...</span>
+              </>
+            ) : (
+              <>
+                <Zap className="w-3.5 h-3.5 text-amber-600" />
+                <span>Initialise store data</span>
+              </>
+            )}
+          </motion.button>
+
           {activeTab === 'promos' && (
-            <div className="hidden xs:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span>Live Promos</span>
             </div>
@@ -892,18 +976,43 @@ const AdminCanvasComponent: React.FC<AdminCanvasProps> = ({
                   animate={{ opacity: 1, y: 0 }}
                   className="bg-white rounded-xl sm:rounded-2xl border border-neutral-200 p-4 sm:p-5 shadow-xs"
                 >
-                  <div className="flex items-center gap-2 mb-3 pb-2 border-b border-neutral-100">
-                    <div className="w-7 h-7 rounded-lg bg-neutral-900 text-white flex items-center justify-center">
-                      <Plus className="w-4 h-4" />
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-2 border-b border-neutral-100">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-neutral-900 text-white flex items-center justify-center">
+                        <Plus className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm sm:text-base font-bold text-neutral-900">
+                          Add New Promo Code
+                        </h3>
+                        <p className="text-xs text-neutral-500">
+                          Instantly synced
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-sm sm:text-base font-bold text-neutral-900">
-                        Add New Promo Code
-                      </h3>
-                      <p className="text-xs text-neutral-500">
-                        Instantly synced
-                      </p>
-                    </div>
+
+                    <motion.button
+                      id="btn-import-default-promos"
+                      type="button"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      disabled={isImportingDefaultPromos}
+                      onClick={handleImportDefaultPromos}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-bold rounded-lg border border-neutral-300 transition-colors cursor-pointer disabled:opacity-50"
+                      title="Import standard discount tiers (D10, D15, D20, D50, F10, F20, F50) into Firestore"
+                    >
+                      {isImportingDefaultPromos ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Importing Defaults...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Import default promo codes</span>
+                        </>
+                      )}
+                    </motion.button>
                   </div>
 
                   <form onSubmit={handleAddPromo} className="space-y-3">

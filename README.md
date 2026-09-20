@@ -9,11 +9,13 @@
 
 | Feature / Component | Implementation Details | Status |
 | :--- | :--- | :--- |
-| **Firebase Auth Admin** | Migrated `src/lib/firebase.ts` and `src/components/modals/AdminLoginModal.tsx` to real email/password authentication (`signInWithEmailAndPassword`). Removed legacy local storage lockouts and default credentials. | **DONE** |
-| **`isAdmin()` Firestore Rule** | Hardened `firestore.rules` to strictly require `request.auth.uid == 'REPLACE_WITH_ADMIN_UID'` or `request.auth.token.admin == true`. Removed permissive authentication fallbacks. | **DONE** |
-| **Server-Side Order Creation** | Built `/api/create-order.ts` using Firebase Admin SDK. Recomputes all prices server-side, validates promos, enforces `.create()` conflict prevention (HTTP 409), generates `customerCode` strictly on server, signs with HMAC-SHA256, and uses clean deduplicated CORS Origin check. | **DONE** |
+| **Firebase Project Migration** | Migrated to new Firebase Project `shop-speedabraker` with default `(default)` database (region `asia-south1` Mumbai). Updated `firebase-applet-config.json`, `src/lib/firebase.ts`, `api/create-order.ts`, `api/verify-order.ts`, and `.env.example`. | **DONE** |
+| **Firebase Auth Admin** | Configured `src/lib/firebase.ts` and `src/components/modals/AdminLoginModal.tsx` for real email/password authentication (`signInWithEmailAndPassword`) with admin UID `CZQpz3IbA9fX3fgYyhEHbA7zdz03`. | **DONE** |
+| **`isAdmin()` Firestore Rule** | Hardened `firestore.rules` to strictly require `request.auth.uid == 'CZQpz3IbA9fX3fgYyhEHbA7zdz03'` or authorized admin emails / claims. | **DONE** |
+| **Server-Side Order Creation** | Built `/api/create-order.ts` using Firebase Admin SDK. Recomputes all prices server-side, validates promos, enforces `.create()` conflict prevention (HTTP 409), generates `customerCode` strictly on server, signs with HMAC-SHA256, and uses clean deduplicated CORS Origin check. Strict project ID safety check against `shop-speedabraker`. | **DONE** |
 | **IP Rate Limiting & TTL** | Enforced 5 orders per IP per 10 minutes in `/api/create-order.ts` using `rate_limits` collection keyed by SHA-256 IP hash. Stores `expiresAt` Date field for automated Firestore TTL cleanup. | **DONE** |
-| **Server-Side Order Verification** | Rewrote `/api/verify-order.ts` to verify orders strictly against stored Firestore documents without trusting client totals or returning internal hash strings. | **DONE** |
+| **Server-Side Order Verification** | Rewrote `/api/verify-order.ts` to verify orders strictly against stored Firestore documents without trusting client totals or returning internal hash strings. Strict project ID safety check against `shop-speedabraker`. | **DONE** |
+| **Database Seeding Controls** | Added "Import default promo codes" and "Initialise store data" buttons to `AdminCanvas.tsx` calling `seedDefaultPromoCodes` and `initializeStoreData` helper functions. | **DONE** |
 | **Firestore Security Rules** | Rules locked for `orders` (`allow create: if false;`), `rate_limits` (`allow read, write: if false;`), `promo_codes` (`allow list: if isAdmin();`), `config` (admin-only writes), and `product_stock`. | **DONE** |
 | **Vercel Headers & CSP** | Configured `vercel.json` with HSTS (`max-age=63072000; includeSubDomains; preload`), `X-Content-Type-Options: nosniff`, `Permissions-Policy`, SPA rewrites preserving `/api/*`, and CSP. | **DONE** |
 | **Vercel Analytics & Insights** | Integrated `@vercel/analytics` and `@vercel/speed-insights` inside root `<ErrorBoundary>`. | **DONE** |
@@ -24,16 +26,16 @@
 
 ---
 
-# Remaining Items
+# Migration
 
-The following items require external manual configuration or future architectural refinement:
+The project was migrated from the legacy project `speedabrakers-shop-10a95` (which used a named Firestore database `speedabrakers-shop-database`) to the new production project **`shop-speedabraker`**.
 
-1. **Replace `'REPLACE_WITH_ADMIN_UID'` in `firestore.rules`**:
-   - Copy the admin user's UID from the Firebase Console and replace `'REPLACE_WITH_ADMIN_UID'` on line 16 of `firestore.rules`, then deploy the rules.
-2. **Tighten CSP (`'unsafe-inline'` / `'unsafe-eval'`)**:
-   - In `vercel.json`, tighten Content Security Policy by replacing `'unsafe-inline'` and `'unsafe-eval'` with cryptographic nonces or SHA hashes once framework script evaluation allows.
-3. **Per-Promo Usage Limits**:
-   - Implement per-promo usage counters and max redemption caps if promotional campaigns require global or per-customer consumption limits.
+Key architectural changes during migration:
+- **Project ID**: `shop-speedabraker` (region `asia-south1` Mumbai).
+- **Firestore Database**: Uses the standard **`(default)`** database instance. The custom database ID was removed from `firebase-applet-config.json` and client SDK initializers.
+- **Admin Authentication**: Admin UID `CZQpz3IbA9fX3fgYyhEHbA7zdz03` configured in `firestore.rules`.
+- **Backend APIs**: `api/create-order.ts` and `api/verify-order.ts` enforce strict project validation, rejecting any credentials not matching `shop-speedabraker` and refusing silent initialization without credentials.
+- **Store Seeding**: Admin UI in `AdminCanvas.tsx` includes one-click buttons to seed default promo codes and initialize product stock / pricing catalog directly into Firestore.
 
 ---
 
@@ -41,21 +43,15 @@ The following items require external manual configuration or future architectura
 
 Follow these exact steps in your external cloud consoles to complete production setup:
 
-### 1. Firebase Console
+### 1. Firebase Console (`shop-speedabraker`)
 1. **Enable Email/Password sign-in**:
-   - Open [Firebase Console](https://console.firebase.google.com/) -> Select project -> **Build** -> **Authentication**.
+   - Open [Firebase Console](https://console.firebase.google.com/) -> Select project `shop-speedabraker` -> **Build** -> **Authentication**.
    - Navigate to the **Sign-in method** tab.
    - Click **Email/Password**, toggle **Enable** to ON, and click **Save**.
-2. **Create admin user account**:
-   - In **Authentication**, switch to the **Users** tab and click **Add user**.
-   - Enter your admin email (e.g. `admin@yourdomain.com`) and a secure password, then click **Add user**.
-3. **Copy UID into `firestore.rules` & deploy**:
-   - Copy the **User UID** of your created admin user from the table.
-   - Open `firestore.rules` and replace `'REPLACE_WITH_ADMIN_UID'` with your copied UID:
-     ```javascript
-     request.auth.uid == '<YOUR_COPIED_ADMIN_UID>' ||
-     ```
-   - Deploy rules using `deploy_firebase` or by pasting into **Firestore Database** -> **Rules** and clicking **Publish**.
+2. **Verify admin user account**:
+   - In **Authentication**, verify user account with UID `CZQpz3IbA9fX3fgYyhEHbA7zdz03` exists (or create it with the matching email).
+3. **Deploy Firestore Security Rules**:
+   - Open `firestore.rules` and deploy them via Firebase CLI (`firebase deploy --only firestore:rules`) or by copying into **Firestore Database** -> **Rules** and clicking **Publish**.
 4. **Enable Firestore TTL Policy for Rate Limiting**:
    - In Firebase Console, navigate to **Firestore Database** -> **TTL** (or **Data** -> **TTL policies**).
    - Click **Create TTL Policy**.
@@ -74,16 +70,30 @@ Log in to [Vercel](https://vercel.com/) -> Select your project -> **Settings** -
 | :--- | :--- | :--- |
 | `ORDER_SIGNING_SECRET` | 32+ character cryptographic secret string used by `/api/create-order` and `/api/verify-order` for HMAC-SHA256 signatures | `your_long_secure_random_secret_string` |
 | `ALLOWED_ORIGIN` | Authorized domain origin for CORS validation and header checks (no trailing slash) | `https://shop-speedabraker.vercel.app` |
-| `FIREBASE_SERVICE_ACCOUNT_KEY` | Minified JSON string of the downloaded service account key | `{"type":"service_account","project_id":"...","private_key":"...","client_email":"..."}` |
+| `FIREBASE_SERVICE_ACCOUNT_KEY` | Minified JSON string of the downloaded service account key for project `shop-speedabraker` | `{"type":"service_account","project_id":"shop-speedabraker","private_key":"...","client_email":"..."}` |
 
-*(Alternatively, instead of `FIREBASE_SERVICE_ACCOUNT_KEY`, you can provide individual variables: `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY`).*
+*(Alternatively, instead of `FIREBASE_SERVICE_ACCOUNT_KEY`, you can provide individual variables: `FIREBASE_PROJECT_ID` = `shop-speedabraker`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY`).*
 
-### 3. Rollback Procedure
-If a production deployment ever needs to be reverted immediately:
-- Navigate to [Vercel Dashboard](https://vercel.com/) -> Select your project -> **Deployments**.
-- Locate the previous known-good deployment in the list.
-- Click the three dots menu (`...`) on that deployment row -> Select **Promote to Production**.
-- Vercel instantly routes 100% of live traffic back to the selected deployment with zero build delays or downtime.
+### 3. Initialise Store Data & Promo Codes
+Once signed into the shop admin panel with your admin user account:
+1. Open Admin Panel -> Click **"Initialise store data"** to write product stock and pricing catalog into Firestore.
+2. Go to **Promo Codes** tab -> Click **"Import default promo codes"** to populate `D10`, `D15`, `D20`, `D50`, `F10`, `F20`, and `F50` into Firestore.
+
+---
+
+# Append-Only Changelog & Audit History
+
+### [2026-09-19] — Firebase Project Migration to `shop-speedabraker`
+- **Files Modified**:
+  - `/firebase-applet-config.json`: Updated with new project credentials (`shop-speedabraker`, `asia-south1`) and removed unused legacy fields.
+  - `/src/lib/firebase.ts`: Switched Firestore initialization to standard `(default)` database. Added `seedDefaultPromoCodes` and `initializeStoreData` functions.
+  - `/api/create-order.ts`: Removed fallback project IDs, added strict safety validation checking that service account project matches `shop-speedabraker`, and returned HTTP 500 on configuration failure.
+  - `/api/verify-order.ts`: Removed fallback project IDs, added strict project safety check for `shop-speedabraker`, and returned HTTP 500 on missing credentials.
+  - `/firestore.rules`: Updated `isAdmin()` function to enforce admin UID `CZQpz3IbA9fX3fgYyhEHbA7zdz03`.
+  - `/src/components/AdminCanvas.tsx`: Added "Import default promo codes" button in promo codes tab and "Initialise store data" button in admin header with confirmation alert.
+  - `/.env.example`: Updated comments and examples to reflect `shop-speedabraker`.
+  - `/README.md`: Updated project ID, documentation, migration details, and manual steps.
+- **Verification**: `bun run lint` and `bun run build` passing cleanly.
 
 ---
 

@@ -14,7 +14,14 @@ service cloud.firestore {
     // Administrator authorization check.
     function isAdmin() {
       return request.auth != null && (
-        request.auth.uid == 'REPLACE_WITH_ADMIN_UID' ||
+        request.auth.uid == 'CZQpz3IbA9fX3fgYyhEHbA7zdz03' ||
+        (
+          request.auth.token.email in [
+            'golgappa.sumit@gmail.com',
+            'shilpimohanta9@gmail.com',
+            'mohantasamaresh62@gmail.com'
+          ] && request.auth.token.email_verified == true
+        ) ||
         request.auth.token.admin == true
       );
     }

@@ -168,24 +168,14 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 let firestoreInstance: Firestore;
 try {
   if (typeof window !== 'undefined') {
-    firestoreInstance = initializeFirestore(
-      app,
-      {
-        experimentalForceLongPolling: true,
-      },
-      firebaseConfigData.firestoreDatabaseId || undefined
-    );
+    firestoreInstance = initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+    });
   } else {
-    firestoreInstance = getFirestore(
-      app,
-      firebaseConfigData.firestoreDatabaseId || undefined
-    );
+    firestoreInstance = getFirestore(app);
   }
 } catch {
-  firestoreInstance = getFirestore(
-    app,
-    firebaseConfigData.firestoreDatabaseId || undefined
-  );
+  firestoreInstance = getFirestore(app);
 }
 
 export const db: Firestore = firestoreInstance;
@@ -523,6 +513,7 @@ export function subscribePricingCatalogFromFirestore(
 
 /**
  * Ensures initial product stock documents exist in Firestore.
+ * Callable by admin.
  */
 export async function ensureProductStockSeeded(): Promise<void> {
   try {
@@ -537,19 +528,18 @@ export async function ensureProductStockSeeded(): Promise<void> {
       }
     }
   } catch (err) {
-    console.warn('Product stock auto-seed note:', err);
+    console.warn('Product stock seed note:', err);
   }
 }
 
 /**
  * Fetches all product stock records from Firestore (with local default fallback).
+ * Safe for unauthenticated visitors when the collection is empty.
  */
 export async function fetchAllProductStock(): Promise<ProductStockRecord[]> {
   try {
     const snap = await getDocs(collection(db, 'product_stock'));
     if (snap.empty) {
-      // Seed if empty
-      await ensureProductStockSeeded();
       return DEFAULT_PRODUCT_STOCK;
     }
     const list: ProductStockRecord[] = [];
@@ -578,6 +568,73 @@ export async function fetchAllProductStock(): Promise<ProductStockRecord[]> {
     console.warn('Error fetching product stock from Firestore, using defaults:', err);
     return DEFAULT_PRODUCT_STOCK;
   }
+}
+
+/**
+ * Imports default promo codes (PROMO_TIERS) into the promo_codes collection.
+ * Admin-only operation with fields satisfying security rules.
+ */
+export async function seedDefaultPromoCodes(): Promise<{ count: number }> {
+  const defaultTiers = [
+    { code: 'D10', type: 'percent' as const, value: 10, label: '10% Discount', minOrderValue: 0, active: true },
+    { code: 'D15', type: 'percent' as const, value: 15, label: '15% Special Discount', minOrderValue: 0, active: true },
+    { code: 'D20', type: 'percent' as const, value: 20, label: '20% Premium Discount', minOrderValue: 0, active: true },
+    { code: 'D50', type: 'percent' as const, value: 50, label: '50% Half Price Discount', minOrderValue: 0, active: true },
+    { code: 'F10', type: 'flat' as const, value: 100, label: '₹100 Flat Discount', minOrderValue: 0, active: true },
+    { code: 'F20', type: 'flat' as const, value: 200, label: '₹200 VIP Flat Discount', minOrderValue: 0, active: true },
+    { code: 'F50', type: 'flat' as const, value: 500, label: '₹500 Mega Flat Discount', minOrderValue: 0, active: true },
+  ];
+
+  for (const tier of defaultTiers) {
+    const promoRef = doc(db, 'promo_codes', tier.code);
+    await setDoc(promoRef, {
+      code: tier.code,
+      type: tier.type,
+      value: tier.value,
+      label: tier.label,
+      active: tier.active,
+      minOrderValue: tier.minOrderValue,
+      createdAt: new Date().toISOString(),
+    });
+  }
+  return { count: defaultTiers.length };
+}
+
+/**
+ * Initialises all store data (writes DEFAULT_PRODUCT_STOCK to product_stock
+ * and default pricing catalog to config/pricing). Admin-only operation.
+ */
+export async function initializeStoreData(): Promise<{ stockCount: number; pricingSeeded: boolean }> {
+  // 1. Write DEFAULT_PRODUCT_STOCK to product_stock
+  for (const item of DEFAULT_PRODUCT_STOCK) {
+    const stockRef = doc(db, 'product_stock', item.productId);
+    await setDoc(stockRef, {
+      ...item,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  // 2. Write default pricing catalog to config/pricing
+  const defaultCatalog = {
+    version: { V1: 100, V2: 300, None: 0 },
+    display: { Yes: 300, No: 0, None: 0 },
+    wireless: { Yes: 500, No: 0, None: 0 },
+    antenna: {
+      baseSocket: 50,
+      quality: { Normal: 200, Powerful: 700 },
+      dbi: { '0dbi': 100, '6dbi': 300, '12dbi': 500 },
+    },
+    mandatoryModules: 300,
+  };
+
+  const pricingRef = doc(db, 'config', 'pricing');
+  await setDoc(pricingRef, {
+    ...defaultCatalog,
+    updatedAt: new Date().toISOString(),
+    updatedBy: auth.currentUser?.email || auth.currentUser?.uid || 'admin',
+  });
+
+  return { stockCount: DEFAULT_PRODUCT_STOCK.length, pricingSeeded: true };
 }
 
 /**

@@ -2,6 +2,8 @@ import { createHmac } from 'crypto';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
 
+const REQUIRED_PROJECT_ID = 'shop-speedabraker';
+
 let dbInstance: Firestore | null = null;
 
 function getDb(): Firestore {
@@ -9,21 +11,36 @@ function getDb(): Firestore {
 
   if (getApps().length === 0) {
     if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+      let serviceAccountCert: any;
       try {
-        const serviceAccountCert = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-        initializeApp({
-          credential: cert(serviceAccountCert),
-        });
-      } catch {
-        initializeApp({
-          projectId: process.env.VITE_FIREBASE_PROJECT_ID || 'speedabrakers-shop-10a95',
-        });
+        serviceAccountCert = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+      } catch (err: any) {
+        console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY JSON:', err?.message || err);
+        throw new Error('Server configuration error.');
       }
+
+      if (!serviceAccountCert || serviceAccountCert.project_id !== REQUIRED_PROJECT_ID) {
+        console.error(
+          `Firebase service account project_id mismatch: expected "${REQUIRED_PROJECT_ID}", got "${serviceAccountCert?.project_id}"`
+        );
+        throw new Error('Server configuration error.');
+      }
+
+      initializeApp({
+        credential: cert(serviceAccountCert),
+      });
     } else if (
       process.env.FIREBASE_PROJECT_ID &&
       process.env.FIREBASE_CLIENT_EMAIL &&
       process.env.FIREBASE_PRIVATE_KEY
     ) {
+      if (process.env.FIREBASE_PROJECT_ID !== REQUIRED_PROJECT_ID) {
+        console.error(
+          `Firebase project_id mismatch: expected "${REQUIRED_PROJECT_ID}", got "${process.env.FIREBASE_PROJECT_ID}"`
+        );
+        throw new Error('Server configuration error.');
+      }
+
       initializeApp({
         credential: cert({
           projectId: process.env.FIREBASE_PROJECT_ID,
@@ -32,9 +49,10 @@ function getDb(): Firestore {
         }),
       });
     } else {
-      initializeApp({
-        projectId: process.env.VITE_FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || 'speedabrakers-shop-10a95',
-      });
+      console.error(
+        'Missing Firebase credentials: neither FIREBASE_SERVICE_ACCOUNT_KEY nor FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY configured.'
+      );
+      throw new Error('Server configuration error.');
     }
   }
 
@@ -134,6 +152,9 @@ export default async function handler(req: any, res: any) {
   } catch (err: any) {
     // Sanitized error response - never return stack traces or internal errors
     console.error('Order verification API error in api/verify-order:', err?.message || err);
+    if (err?.message === 'Server configuration error.') {
+      return res.status(500).json({ error: 'Server configuration error.' });
+    }
     return res.status(500).json({ error: 'Internal server error validating order integrity.' });
   }
 }
