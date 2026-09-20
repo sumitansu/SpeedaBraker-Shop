@@ -20,6 +20,7 @@
 | **SEO, Social Sharing & Domain** | Configured canonical URL, OpenGraph, Twitter card targeting `og-image.png`, `robots.txt`, `sitemap.xml`, Schema.org JSON-LD, all pointing to `https://shop-speedabraker.vercel.app`. Pruned obsolete `og-image.svg`. | **DONE** |
 | **Code Splitting & Lazy Modals** | Converted `AdminCanvas` and all 12 modal components to `React.lazy()` + `<React.Suspense fallback={null}>` dynamic imports with Vite vendor chunking. | **DONE** |
 | **User-Facing Text Cleanup** | Removed all user-visible occurrences of "Firebase", "Firestore", and "database" from customer and administrative interfaces across `src/App.tsx`, `src/components/modals/AdminLoginModal.tsx`, and `src/components/AdminCanvas.tsx`. | **DONE** |
+| **Server-Authoritative Invoicing** | Synchronized client-side state (`invoiceNumber`, `customerCode`, `verificationHash`) with server return values from `/api/create-order`. Client updates `customerCode` and uses `confirmedInvoiceNumber` state on order placement. Configuration changes automatically clear confirmed invoice state. Deleted obsolete functions (`sanitizeAndValidateAccount`, `verifyAdminCredentials`). | **DONE** |
 
 ---
 
@@ -223,3 +224,10 @@ service cloud.firestore {
   - `/src/components/AdminCanvas.tsx`: Sanitized all administrative promo sync, save, and delete messages.
   - `/public/og-image.svg`: Deleted obsolete unused asset.
   - `/README.md`: Updated comprehensive status table, remaining items, manual setup guide with TTL policy instructions, and rollback procedure.
+
+### [2026-09-19] — Server-Authoritative Invoice Number & Customer Code Synchronization
+- **Files Modified**:
+  - `/src/lib/firebase.ts`: Updated `saveOrderToFirestore` return type to include `customerCode`. Deleted obsolete unused functions `sanitizeAndValidateAccount` and `verifyAdminCredentials`.
+  - `/src/utils/invoiceCode.ts`: Updated `generateOrderDetailsJson` to accept and serialize optional `verificationHash` in the invoice payload.
+  - `/src/App.tsx`: Added `confirmedInvoiceNumber` and `confirmedOrderHash` states. Updated `handlePlaceOrder` to synchronize state with server-generated `customerCode`, `invoiceNumber`, and `hash`. Added automatic invalidation of confirmed order state upon hardware configuration changes. Updated `handleConfirmReset` and `applyImportedConfiguration` to manage confirmed invoice state cleanly.
+  - `/README.md`: Documented server ownership of invoice number and customer code.

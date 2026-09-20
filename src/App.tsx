@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ArrowLeft, ArrowRight, ChevronDown, Receipt } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -677,9 +677,34 @@ export default function App() {
     setCustomerCode((prev) => extractBaseCustomerCode(prev));
   };
 
-  const invoiceNumber = useMemo(() => {
+  const [confirmedInvoiceNumber, setConfirmedInvoiceNumber] = useState<string | null>(null);
+  const [confirmedOrderHash, setConfirmedOrderHash] = useState<string | null>(null);
+
+  const computedInvoiceNumber = useMemo(() => {
     return generateInvoiceNumber(upperBoxes, slots, antennaDbiTypes, customerCode);
   }, [upperBoxes, slots, antennaDbiTypes, customerCode]);
+
+  const invoiceNumber = confirmedInvoiceNumber || computedInvoiceNumber;
+
+  const configFingerprint = useMemo(() => {
+    return JSON.stringify({
+      upperBoxes,
+      slots,
+      antennaDbiTypes,
+      promoCode: appliedPromo?.code || '',
+    });
+  }, [upperBoxes, slots, antennaDbiTypes, appliedPromo]);
+
+  const lastConfirmedFingerprintRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (lastConfirmedFingerprintRef.current && lastConfirmedFingerprintRef.current !== configFingerprint) {
+      setConfirmedInvoiceNumber(null);
+      setConfirmedOrderHash(null);
+      setDbVerificationStatus(null);
+      lastConfirmedFingerprintRef.current = null;
+    }
+  }, [configFingerprint]);
 
   const [placedInvoices, setPlacedInvoices] = useState<Set<string>>(new Set());
   const [isPlacingOrder, setIsPlacingOrder] = useState<boolean>(false);
@@ -699,7 +724,8 @@ export default function App() {
       antennaDbiTypes,
       customerCode,
       invoiceNumber,
-      appliedPromo
+      appliedPromo,
+      confirmedOrderHash
     );
     downloadSbsFile(invoiceNumber, orderDetails);
   };
@@ -721,8 +747,26 @@ export default function App() {
         throw new Error('Order creation failed.');
       }
 
-      const confirmedInvoice = result.invoiceNumber || invoiceNumber;
-      setPlacedInvoices((prev) => new Set(prev).add(confirmedInvoice));
+      if (result.customerCode) {
+        setCustomerCode(result.customerCode);
+      }
+
+      const recomputedWithServerCode = result.customerCode
+        ? generateInvoiceNumber(upperBoxes, slots, antennaDbiTypes, result.customerCode)
+        : null;
+
+      const finalInvoiceNumber =
+        recomputedWithServerCode === result.invoiceNumber
+          ? result.invoiceNumber
+          : result.invoiceNumber || computedInvoiceNumber;
+
+      setConfirmedInvoiceNumber(finalInvoiceNumber);
+      if (result.hash) {
+        setConfirmedOrderHash(result.hash);
+      }
+      lastConfirmedFingerprintRef.current = configFingerprint;
+
+      setPlacedInvoices((prev) => new Set(prev).add(finalInvoiceNumber));
       setDbVerificationStatus({
         checked: true,
         verified: true,
@@ -750,6 +794,9 @@ export default function App() {
     setCustomizeSlotId(null);
     setShowBillCanvas(false);
     setCustomerCode(generateRandomCustomerCode());
+    setConfirmedInvoiceNumber(null);
+    setConfirmedOrderHash(null);
+    lastConfirmedFingerprintRef.current = null;
     setAppliedPromo(null);
     setDbVerificationStatus(null);
     setPlacedInvoices(new Set());
@@ -805,15 +852,33 @@ export default function App() {
 
         if (parsed.invoiceNumber) {
           const verification = await verifyOrderInFirestore(parsed.invoiceNumber);
-          if (verification.exists && verification.verifiedPromo) {
-            setAppliedPromo(verification.verifiedPromo);
+          if (verification.exists && verification.order) {
+            setConfirmedInvoiceNumber(parsed.invoiceNumber);
+            if (verification.order.verificationHash) {
+              setConfirmedOrderHash(verification.order.verificationHash);
+            }
+            if (verification.verifiedPromo) {
+              setAppliedPromo(verification.verifiedPromo);
+            } else {
+              setAppliedPromo(null);
+            }
+            setPlacedInvoices((prev) => new Set(prev).add(parsed.invoiceNumber!));
             setDbVerificationStatus({
               checked: true,
               verified: true,
               message: 'Verified authentic order',
             });
+            lastConfirmedFingerprintRef.current = JSON.stringify({
+              upperBoxes: newUpperBoxes,
+              slots: newSlots,
+              antennaDbiTypes: newDbi,
+              promoCode: verification.verifiedPromo?.code || '',
+            });
           } else {
             // Unregistered or spoofed/tampered
+            setConfirmedInvoiceNumber(null);
+            setConfirmedOrderHash(null);
+            lastConfirmedFingerprintRef.current = null;
             setAppliedPromo(null);
             setDbVerificationStatus({
               checked: true,
@@ -824,12 +889,18 @@ export default function App() {
             });
           }
         } else {
+          setConfirmedInvoiceNumber(null);
+          setConfirmedOrderHash(null);
+          lastConfirmedFingerprintRef.current = null;
           setAppliedPromo(null);
           setDbVerificationStatus(null);
         }
         setShowBillCanvas(true);
       } else {
         // Hardware-only item code import
+        setConfirmedInvoiceNumber(null);
+        setConfirmedOrderHash(null);
+        lastConfirmedFingerprintRef.current = null;
         setShowBillCanvas(false);
         setAppliedPromo(null);
         setDbVerificationStatus(null);

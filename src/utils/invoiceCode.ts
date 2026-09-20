@@ -160,7 +160,8 @@ export function generateOrderDetailsJson(
   antennaDbiTypes: Record<number, AntennaDbiType | undefined>,
   customerCode: string,
   invoiceNumber: string,
-  appliedPromo?: AppliedPromo | null
+  appliedPromo?: AppliedPromo | null,
+  verificationHash?: string | null
 ) {
   const versionVal = upperBoxes.find((b) => b.label.toLowerCase() === 'version')?.value || 'None';
   const displayVal = upperBoxes.find((b) => b.label.toLowerCase() === 'display')?.value || 'None';
@@ -222,6 +223,7 @@ export function generateOrderDetailsJson(
       customerCode,
       baseCustomerCode,
       promoTier: promoTier || (appliedPromo ? appliedPromo.tierId : null),
+      verificationHash: verificationHash || undefined,
       date: new Date().toLocaleDateString('en-IN', {
         year: 'numeric',
         month: 'short',
@@ -230,6 +232,7 @@ export function generateOrderDetailsJson(
       currency: 'INR',
       currencySymbol: '₹',
     },
+    verificationHash: verificationHash || undefined,
     promoDiscount: appliedPromo
       ? {
           applied: true,

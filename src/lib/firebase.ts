@@ -287,7 +287,7 @@ export interface CreateOrderParams {
  */
 export async function saveOrderToFirestore(
   params: CreateOrderParams
-): Promise<{ success: boolean; invoiceNumber: string; hash: string }> {
+): Promise<{ success: boolean; invoiceNumber: string; customerCode: string; hash: string }> {
   const res = await fetch('/api/create-order', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -310,6 +310,7 @@ export async function saveOrderToFirestore(
   return {
     success: true,
     invoiceNumber: data.invoiceNumber,
+    customerCode: data.customerCode,
     hash: data.verificationHash,
   };
 }
@@ -392,68 +393,6 @@ export async function verifyOrderInFirestore(invoiceNumber: string): Promise<{
 }
 
 /**
- * Anti-Injection sanitization and format validation:
- * Strictly verifies account name matches alphanumeric characters only, prevents SQL / NoSQL / script payloads.
- */
-export function sanitizeAndValidateAccount(rawInput: string): { valid: boolean; cleanAccount: string; error?: string } {
-  if (typeof rawInput !== 'string') {
-    return { valid: false, cleanAccount: '', error: 'Invalid input format.' };
-  }
-
-  const clean = rawInput.trim();
-
-  if (!clean) {
-    return { valid: false, cleanAccount: '', error: 'Admin email or account name is required.' };
-  }
-
-  if (clean.length < 3 || clean.length > 64) {
-    return { valid: false, cleanAccount: '', error: 'Account identifier must be between 3 and 64 characters.' };
-  }
-
-  // Check for common SQL injection or script injection signatures
-  const injectionPatterns = [
-    /['";]/,                 // SQL quote / delimiter
-    /(\bUNION\b|\bSELECT\b|\bDROP\b|\bINSERT\b|\bUPDATE\b|\bDELETE\b)/i, // Dangerous SQL keywords
-    /[<>{}\\\$\*]/,          // Script / tags / regex operators
-  ];
-
-  for (const pattern of injectionPatterns) {
-    if (pattern.test(clean)) {
-      return {
-        valid: false,
-        cleanAccount: '',
-        error: 'Security Warning: Special characters or injection tokens are prohibited.',
-      };
-    }
-  }
-
-  // If email format
-  if (clean.includes('@')) {
-    const emailRegex = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/;
-    if (!emailRegex.test(clean)) {
-      return {
-        valid: false,
-        cleanAccount: '',
-        error: 'Please enter a valid email address.',
-      };
-    }
-    return { valid: true, cleanAccount: clean.toLowerCase() };
-  }
-
-  // Strictly enforce alphanumeric + underscore for username alias
-  const safeRegex = /^[a-zA-Z0-9_]+$/;
-  if (!safeRegex.test(clean)) {
-    return {
-      valid: false,
-      cleanAccount: '',
-      error: 'Account name can only contain letters, numbers, underscores, or a valid email address.',
-    };
-  }
-
-  return { valid: true, cleanAccount: clean.toLowerCase() };
-}
-
-/**
  * Authenticates admin via official Firebase Authentication (email and password).
  */
 export async function loginAdminWithFirebase(
@@ -503,21 +442,6 @@ export async function loginAdminWithFirebase(
       error: message,
     };
   }
-}
-
-/**
- * Proxy for backward compatibility with existing components
- */
-export async function verifyAdminCredentials(
-  email: string,
-  rawPassword: string
-): Promise<{
-  success: boolean;
-  username?: string;
-  role?: string;
-  error?: string;
-}> {
-  return loginAdminWithFirebase(email, rawPassword);
 }
 
 /**
