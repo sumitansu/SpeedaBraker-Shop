@@ -1,4 +1,4 @@
-import { createHmac } from 'crypto';
+import { createHash, createHmac } from 'crypto';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
 
@@ -159,13 +159,26 @@ function computeItemCode(
 }
 
 export default async function handler(req: any, res: any) {
-  // CORS configuration
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // CORS configuration using ALLOWED_ORIGIN env var
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || '';
+  if (allowedOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
+    const origin = req.headers?.origin || req.headers?.Origin;
+    if (allowedOrigin && origin && origin !== allowedOrigin) {
+      return res.status(403).end();
+    }
     return res.status(200).end();
+  }
+
+  // Reject requests whose Origin header doesn't match when ALLOWED_ORIGIN is set
+  const requestOrigin = req.headers?.origin || req.headers?.Origin;
+  if (allowedOrigin && requestOrigin && requestOrigin !== allowedOrigin) {
+    return res.status(403).json({ error: 'Forbidden: Origin not allowed.' });
   }
 
   if (req.method !== 'POST') {
@@ -251,13 +264,8 @@ export default async function handler(req: any, res: any) {
     }
   }
 
-  // Validate or generate customer code (must be non-empty alphanumeric, max 32 chars)
-  let customerCode = '';
-  if (typeof body.customerCode === 'string' && /^[A-Za-z0-9]{3,32}$/.test(body.customerCode.trim())) {
-    customerCode = body.customerCode.trim().toUpperCase();
-  } else {
-    customerCode = generateRandomCustomerCode();
-  }
+  // Generate customerCode on the server only (ignore any client-sent customerCode)
+  const customerCode = generateRandomCustomerCode();
 
   // Promo code input
   const promoCodeString =
@@ -269,6 +277,55 @@ export default async function handler(req: any, res: any) {
 
   try {
     const db = getDb();
+
+    // Rate limit: 5 orders per IP per 10 minutes via rate_limits collection (doc id = hashed IP, use x-forwarded-for)
+    const xForwardedFor = req.headers['x-forwarded-for'] || req.headers['x-real-ip'];
+    const clientIp = (
+      Array.isArray(xForwardedFor)
+        ? xForwardedFor[0]
+        : typeof xForwardedFor === 'string'
+        ? xForwardedFor.split(',')[0].trim()
+        : req.socket?.remoteAddress || req.connection?.remoteAddress || '127.0.0.1'
+    ) || '127.0.0.1';
+
+    const ipHash = createHash('sha256').update(clientIp).digest('hex');
+    const rateLimitRef = db.collection('rate_limits').doc(ipHash);
+    const now = Date.now();
+    const WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+    const MAX_ORDERS = 5;
+
+    const rateLimitAllowed = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(rateLimitRef);
+      let timestamps: number[] = [];
+      if (snap.exists) {
+        const data = snap.data();
+        if (Array.isArray(data?.timestamps)) {
+          timestamps = data.timestamps.filter(
+            (ts: unknown) => typeof ts === 'number' && now - ts < WINDOW_MS
+          );
+        }
+      }
+      if (timestamps.length >= MAX_ORDERS) {
+        return false;
+      }
+      timestamps.push(now);
+      tx.set(
+        rateLimitRef,
+        {
+          ipHash,
+          timestamps,
+          updatedAt: new Date(now).toISOString(),
+        },
+        { merge: true }
+      );
+      return true;
+    });
+
+    if (!rateLimitAllowed) {
+      return res.status(429).json({
+        error: 'Too many requests. Rate limit of 5 orders per 10 minutes exceeded.',
+      });
+    }
 
     // 1. Load prices from Firestore config/pricing (fallback DEFAULT_PRICING_CATALOG)
     let catalog: PricingCatalog = { ...DEFAULT_PRICING_CATALOG };
@@ -410,7 +467,23 @@ export default async function handler(req: any, res: any) {
       createdAt: nowIso,
     };
 
-    await db.collection('orders').doc(invoiceNumber).set(orderRecord);
+    try {
+      await db.collection('orders').doc(invoiceNumber).create(orderRecord);
+    } catch (createErr: any) {
+      const isAlreadyExists =
+        createErr?.code === 6 ||
+        createErr?.code === 'ALREADY_EXISTS' ||
+        createErr?.details?.includes('already exists') ||
+        createErr?.message?.includes('already exists') ||
+        createErr?.message?.includes('ALREADY_EXISTS');
+
+      if (isAlreadyExists) {
+        return res.status(409).json({
+          error: `Order with invoice ${invoiceNumber} already exists.`,
+        });
+      }
+      throw createErr;
+    }
 
     // Return invoice data
     return res.status(201).json({

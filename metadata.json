@@ -1,6 +1,6 @@
 {
   "name": "Speedabraker's Shop",
-  "description": "Speedabraker's Shop layout with structured top control grid, step-by-step hardware configurator, and itemized bill and invoice generator.",
+  "description": "Configure custom embedded hardware modules, get instant itemized price breakdowns, and generate cryptographically verified invoices with Speedabraker's Shop.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

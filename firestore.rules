@@ -89,6 +89,12 @@ service cloud.firestore {
       allow delete: if isAdmin() && isValidId(productId);
     }
 
+    // Rate Limits Collection:
+    // Written exclusively via Admin SDK on the server. Deny all client access.
+    match /rate_limits/{docId} {
+      allow read, write: if false;
+    }
+
     // Admin Accounts Collection:
     // Deprecated: Plaintext/custom password hashes in Firestore are disabled.
     // Official Firebase Authentication is used instead. All reads and writes are blocked.

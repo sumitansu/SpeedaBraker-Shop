@@ -267,7 +267,7 @@ export async function validatePromoCodeWithFirestore(
     };
   } catch (err) {
     console.error('Firestore promo validation error:', err);
-    return { valid: false, error: 'Could not connect to database to verify promo code.' };
+    return { valid: false, error: 'Could not verify promo code.' };
   }
 }
 
@@ -331,42 +331,36 @@ export async function verifyOrderInFirestore(invoiceNumber: string): Promise<{
     if (!snap.exists()) {
       return {
         exists: false,
-        message: 'Order not found in Firebase database. No promo discount verified.',
+        message: 'Order not found. No promo discount verified.',
       };
     }
 
     const data = snap.data() as FirestoreOrderRecord;
 
-    // Check server-side verification first, fallback to client hash
-    let isHashValid = false;
+    // Rely on verified from the API instead of comparing hashes on the client
+    let isVerified = false;
     try {
       const res = await fetch('/api/verify-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           invoiceNumber: data.invoiceNumber,
-          itemCode: data.itemCode,
-          customerCode: data.customerCode,
-          itemsSubtotal: data.itemsSubtotal,
-          discountAmount: data.discountAmount,
-          payableTotal: data.payableTotal,
-          appliedPromoCode: data.appliedPromoCode || '',
         }),
       });
       if (res.ok) {
         const verifyRes = await res.json();
-        if (verifyRes.serverHash && verifyRes.serverHash === data.verificationHash) {
-          isHashValid = true;
+        if (verifyRes?.verified === true) {
+          isVerified = true;
         }
       }
     } catch {
       // Ignore API error in offline/local preview mode
     }
 
-    if (!isHashValid) {
+    if (!isVerified) {
       return {
         exists: true,
-        message: 'Security warning: Order hash verification failed (tampered).',
+        message: 'Security warning: Order verification failed (tampered or unverified).',
       };
     }
 
@@ -386,20 +380,15 @@ export async function verifyOrderInFirestore(invoiceNumber: string): Promise<{
       exists: true,
       order: data,
       verifiedPromo,
-      message: 'Verified authentic database order.',
+      message: 'Verified authentic order.',
     };
   } catch (err) {
     console.warn('Firestore order lookup failed:', err);
     return {
       exists: false,
-      message: 'Could not connect to Firebase database to verify order.',
+      message: 'Could not verify order.',
     };
   }
-}
-
-// Admin account seeding is no longer needed with Firebase Authentication
-export async function ensureAdminAccountSeeded(): Promise<void> {
-  // Deprecated: Migrated to Firebase Authentication (email/password)
 }
 
 /**
@@ -502,7 +491,7 @@ export async function loginAdminWithFirebase(
     ) {
       message = 'Invalid email or password.';
     } else if (firebaseErr?.code === 'auth/too-many-requests') {
-      message = 'Too many failed attempts. Firebase has temporarily blocked requests.';
+      message = 'Too many failed attempts. Please try again later.';
     } else if (firebaseErr?.code === 'auth/invalid-email') {
       message = 'Please enter a valid email address.';
     } else if (firebaseErr?.message) {

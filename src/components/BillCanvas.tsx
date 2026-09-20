@@ -222,9 +222,6 @@ export const BillCanvas: React.FC<BillCanvasProps> = ({
               {t('app.title', "Speedabraker's Shop")}
             </h1>
           </div>
-          <p className="text-[11px] font-medium text-neutral-500 uppercase tracking-wide">
-            {t('bill.subtitle', 'Retail Hardware Bill & Invoice')}
-          </p>
 
           <div className="mt-3 bg-neutral-50 rounded-xl p-2.5 border border-neutral-200/70 text-left text-xs space-y-1">
             <div className="flex justify-between items-center gap-2">
@@ -234,7 +231,7 @@ export const BillCanvas: React.FC<BillCanvasProps> = ({
                 whileHover={{ scale: 1.04 }}
                 whileTap={{ scale: 0.94 }}
                 onClick={copyInvoiceId}
-                title={t('bill.clickCopy', 'Click to copy Invoice ID')}
+                title={t('bill.clickCopy', 'Copy invoice number')}
                 className="group flex items-center gap-1.5 font-mono font-bold text-neutral-900 text-[11px] hover:text-neutral-700 transition-all cursor-pointer bg-white px-2.5 py-0.5 rounded-lg border border-neutral-200 shadow-2xs"
               >
                 <span>{invoiceNumber}</span>
@@ -268,9 +265,9 @@ export const BillCanvas: React.FC<BillCanvasProps> = ({
               <span className="font-medium text-neutral-800">{invoiceDate}</span>
             </div>
 
-            {/* Firebase Database Status Badge */}
+            {/* Status Badge */}
             <div className="pt-1 mt-1 border-t border-neutral-200/60 flex items-center justify-between">
-              <span className="text-neutral-500 text-[10px]">{t('bill.database', 'Database')}:</span>
+              <span className="text-neutral-500 text-[10px]">{t('bill.database', 'Status')}:</span>
               {isRegistered || (dbVerificationStatus?.checked && dbVerificationStatus.verified) ? (
                 <motion.span
                   key="verified"
@@ -279,7 +276,7 @@ export const BillCanvas: React.FC<BillCanvasProps> = ({
                   className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 shadow-2xs"
                 >
                   <ShieldCheck className="w-2.5 h-2.5 text-emerald-600" />
-                  <span>{t('bill.verifiedDb', 'Verified in Firebase')}</span>
+                  <span>{t('bill.verifiedDb', 'Order confirmed')}</span>
                 </motion.span>
               ) : (
                 <motion.span
@@ -289,7 +286,7 @@ export const BillCanvas: React.FC<BillCanvasProps> = ({
                   className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 shadow-2xs"
                 >
                   <ShieldAlert className="w-2.5 h-2.5 text-amber-600" />
-                  <span>{t('bill.unregisteredDb', 'Unregistered Invoice')}</span>
+                  <span>{t('bill.unregisteredDb', 'Not placed yet')}</span>
                 </motion.span>
               )}
             </div>
@@ -587,12 +584,12 @@ export const BillCanvas: React.FC<BillCanvasProps> = ({
                   ? 'bg-neutral-800 text-neutral-200 scale-98 ring-2 ring-neutral-400/50'
                   : 'bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs'
               }`}
-              title={t('bill.downloadTitle', 'Click to download registered .sbs invoice, hold to copy Invoice ID')}
+              title={t('bill.downloadTitle', 'Download invoice. Hold to copy invoice number.')}
             >
               {copiedId ? (
                 <>
                   <Check className="w-3.5 h-3.5 text-white shrink-0" />
-                  <span>{t('bill.copied', 'Invoice ID Copied!')}</span>
+                  <span>{t('bill.copied', 'Invoice number copied')}</span>
                 </>
               ) : (
                 <>
@@ -610,12 +607,12 @@ export const BillCanvas: React.FC<BillCanvasProps> = ({
               whileTap={{ scale: isPlacingOrder ? 1 : 0.98 }}
               onClick={onPlaceOrder}
               className="w-full py-2.5 px-4 rounded-lg font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer select-none active:scale-98 bg-neutral-900 hover:bg-black text-white shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
-              title={t('bill.placeOrderTitle', 'Click to place order and register invoice in database')}
+              title={t('bill.placeOrderTitle', 'Place order')}
             >
               {isPlacingOrder ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                  <span>{t('bill.placingOrder', 'Placing Order & Registering...')}</span>
+                  <span>{t('bill.placingOrder', 'Placing order...')}</span>
                 </>
               ) : (
                 <>
@@ -625,11 +622,6 @@ export const BillCanvas: React.FC<BillCanvasProps> = ({
               )}
             </motion.button>
           )}
-          <span className="text-[10px] text-neutral-400">
-            {isRegistered
-              ? t('bill.downloadHint', 'Invoice registered in database • Click to save .sbs file')
-              : t('bill.placeOrderHint', 'Click to register invoice in database & place order')}
-          </span>
         </div>
 
         {/* Simple Footer */}

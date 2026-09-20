@@ -130,9 +130,6 @@ export default async function handler(req: any, res: any) {
       verified: isVerified,
       tamperDetected: !isVerified,
       invoiceNumber,
-      serverHash: expectedServerHash,
-      storedPayableTotal,
-      timestamp: new Date().toISOString(),
     });
   } catch (err: any) {
     // Sanitized error response - never return stack traces or internal errors
